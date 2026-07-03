@@ -1,0 +1,26 @@
+idf_component_register(
+    SRCS
+        "src/watch_os.c"
+        "src/board/watch_board.c"
+        "src/ui/native_ui.c"
+        "src/storage/storage.c"
+        "src/kernel/process_manager.c"
+        "src/runtime/wasm_runtime.c"
+        "src/apps/app_catalog.c"
+    INCLUDE_DIRS
+        "include"
+    PRIV_INCLUDE_DIRS
+        "src"
+        "src/apps"
+        "src/board"
+        "src/kernel"
+        "src/runtime"
+        "src/storage"
+        "src/ui"
+    REQUIRES
+        fayasm_port
+        lvgl
+        esp_timer
+        nvs_flash
+        esp32_s3_touch_amoled_2_06
+)

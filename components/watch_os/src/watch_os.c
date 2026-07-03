@@ -1,11 +1,13 @@
 #include "watch_os.h"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "app_catalog.h"
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "native_ui.h"
@@ -20,18 +22,39 @@ typedef struct {
     watch_wasm_runtime_t wasm_runtime;
     watch_process_manager_t process_manager;
     TaskHandle_t maintenance_task;
+    int64_t last_clock_tick_seconds;
 } watch_os_state_t;
 
 static const char *TAG = "watch_os";
 static watch_os_state_t s_state;
 
+static bool format_clock_result(int32_t encoded, char *buffer, size_t buffer_size)
+{
+    const int32_t hours = encoded / 10000;
+    const int32_t minutes = (encoded / 100) % 100;
+    const int32_t seconds = encoded % 100;
+
+    if ((buffer == NULL) || (buffer_size == 0) || (encoded < 0) ||
+        (hours < 0) || (hours > 23) ||
+        (minutes < 0) || (minutes > 59) ||
+        (seconds < 0) || (seconds > 59)) {
+        return false;
+    }
+
+    snprintf(buffer, buffer_size, "%02ld:%02ld:%02ld", (long)hours, (long)minutes, (long)seconds);
+    return true;
+}
+
 static void update_shell_ui(void)
 {
     watch_ui_shell_model_t model = {0};
+    char clock_buffer[16];
     size_t internal_free = 0;
     size_t psram_free = 0;
     size_t used = 0;
     const bool pressure = watch_process_manager_memory_pressure(&s_state.process_manager, &internal_free, &psram_free);
+    const watch_os_process_snapshot_t *clock_process =
+        watch_process_manager_find(&s_state.process_manager, "wasm.demo.clock");
 
     snprintf(model.headline,
              sizeof(model.headline),
@@ -47,6 +70,14 @@ static void update_shell_ui(void)
              sizeof(model.footer),
              "storage: %s",
              watch_storage_available(&s_state.storage) ? watch_storage_root(&s_state.storage) : "not mounted");
+
+    used += snprintf(model.apps_line + used,
+                     sizeof(model.apps_line) - used,
+                     "demo clock: %s\n",
+                     (clock_process != NULL) && clock_process->has_last_result &&
+                             format_clock_result(clock_process->last_result_i32, clock_buffer, sizeof(clock_buffer))
+                         ? clock_buffer
+                         : "waiting for first tick");
 
     used += snprintf(model.apps_line + used,
                      sizeof(model.apps_line) - used,
@@ -111,6 +142,48 @@ static esp_err_t launch_demo_app_if_enabled(void)
     return err;
 }
 
+static esp_err_t tick_clock_demo_if_due(void)
+{
+    watch_os_process_snapshot_t *process;
+    watch_wasm_result_t result = {0};
+    char clock_buffer[16];
+    const int64_t now_seconds = (int64_t)(esp_timer_get_time() / 1000000);
+    esp_err_t err;
+
+    if (s_state.last_clock_tick_seconds == now_seconds) {
+        return ESP_OK;
+    }
+
+    process = watch_process_manager_find(&s_state.process_manager, "wasm.demo.clock");
+    if (process == NULL) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    s_state.last_clock_tick_seconds = now_seconds;
+    watch_process_manager_mark_state(process, WATCH_PROCESS_RUNNING, true);
+    err = watch_wasm_runtime_run(&s_state.wasm_runtime, process->app, &result);
+    watch_process_manager_set_result(process,
+                                     (err == ESP_OK) ? result.last_status : err,
+                                     result.has_last_result,
+                                     result.last_result_i32);
+    watch_process_manager_mark_state(process,
+                                     (err == ESP_OK) ? WATCH_PROCESS_READY : WATCH_PROCESS_FAULTED,
+                                     result.loaded && !result.hibernated);
+
+    if ((err == ESP_OK) && result.has_last_result &&
+        format_clock_result(result.last_result_i32, clock_buffer, sizeof(clock_buffer))) {
+        ESP_LOGI(TAG,
+                 "clock demo %s time=%s encoded=%ld",
+                 process->app->id,
+                 clock_buffer,
+                 (long)result.last_result_i32);
+    } else if (err != ESP_OK) {
+        ESP_LOGW(TAG, "clock demo %s failed err=%s", process->app->id, esp_err_to_name(err));
+    }
+
+    return err;
+}
+
 static void handle_memory_pressure(void)
 {
     watch_os_process_snapshot_t *victim;
@@ -142,6 +215,7 @@ static void maintenance_task(void *arg)
 
     while (true) {
         handle_memory_pressure();
+        (void)tick_clock_demo_if_due();
         update_shell_ui();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -155,6 +229,7 @@ esp_err_t watch_os_start(const watch_os_config_t *config)
     ESP_RETURN_ON_FALSE(config != NULL, ESP_ERR_INVALID_ARG, TAG, "missing config");
     memset(&s_state, 0, sizeof(s_state));
     s_state.config = *config;
+    s_state.last_clock_tick_seconds = -1;
 
     ESP_RETURN_ON_ERROR(watch_board_init(), TAG, "board init failed");
     ESP_RETURN_ON_ERROR(watch_native_ui_show_boot("display ready", 10), TAG, "boot ui failed");
@@ -173,6 +248,7 @@ esp_err_t watch_os_start(const watch_os_config_t *config)
 
     ESP_RETURN_ON_ERROR(watch_native_ui_show_boot("registering apps", 80), TAG, "boot ui failed");
     (void)launch_demo_app_if_enabled();
+    (void)tick_clock_demo_if_due();
 
     ESP_RETURN_ON_ERROR(watch_native_ui_show_boot("entering shell", 100), TAG, "boot ui failed");
     update_shell_ui();

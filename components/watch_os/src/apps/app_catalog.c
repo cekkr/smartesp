@@ -1,5 +1,6 @@
 #include "app_catalog.h"
 
+#include "clock_demo_wasm.h"
 #include "sample_add_wasm.h"
 
 static const watch_os_app_descriptor_t k_catalog[] = {
@@ -41,6 +42,18 @@ static const watch_os_app_descriptor_t k_catalog[] = {
         .entry_export = "run",
         .embedded_wasm = k_watch_demo_add_wasm,
         .embedded_wasm_size = sizeof(k_watch_demo_add_wasm),
+    },
+    {
+        .id = "wasm.demo.clock",
+        .title = "Demo Clock",
+        .kind = WATCH_APP_KIND_WASM,
+        .residency = WATCH_APP_RESIDENCY_HIBERNABLE,
+        .ram_budget_bytes = 96 * 1024,
+        .autostart = false,
+        .native_critical_ui = false,
+        .entry_export = "run",
+        .embedded_wasm = k_watch_demo_clock_wasm,
+        .embedded_wasm_size = sizeof(k_watch_demo_clock_wasm),
     },
     {
         .id = "wasm.workout.stub",

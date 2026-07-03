@@ -48,6 +48,7 @@ Built-in scenarios:
     - boot-ui stage="entering shell" progress=100
     - shell-ui rendered
     - demo app wasm.demo.add result=12
+    - clock demo wasm.demo.clock time=
     - smartesp started
 EOF
 }
@@ -178,6 +179,7 @@ case "$SCENARIO" in
         append_expect_log 'boot-ui stage="entering shell" progress=100'
         append_expect_log 'shell-ui rendered'
         append_expect_log 'demo app wasm.demo.add result=12'
+        append_expect_log 'clock demo wasm.demo.clock time='
         append_expect_log 'smartesp started'
         ;;
     none)
@@ -227,25 +229,69 @@ if [ "$DO_FLASH" -eq 1 ]; then
 fi
 
 if [ "$DO_MONITOR" -eq 1 ]; then
-    run_in_idf_env python3 - "$BUILD_DIR" "$PORT" "$BAUD" "$MONITOR_SECONDS" "$MONITOR_LOG" <<'PY'
+    run_in_idf_env python3 - "$PORT" "$TARGET" "$BAUD" "$MONITOR_SECONDS" "$MONITOR_LOG" <<'PY'
+import os
+import select
 import subprocess
 import sys
+import termios
 import time
 
-build_dir, port, baud, seconds, log_path = sys.argv[1:]
+port, target, baud, seconds, log_path = sys.argv[1:]
 seconds = int(seconds)
-cmd = ["idf.py", "-B", build_dir, "-p", port, "-b", baud, "monitor"]
-with open(log_path, "w", encoding="utf-8", errors="replace") as log:
-    proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+baud = int(baud)
+
+subprocess.run(
+    [
+        sys.executable,
+        "-m",
+        "esptool",
+        "--chip",
+        target,
+        "-p",
+        port,
+        "--before",
+        "default-reset",
+        "--after",
+        "hard-reset",
+        "chip_id",
+    ],
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    check=False,
+)
+
+fd = os.open(port, os.O_RDONLY | os.O_NONBLOCK)
+try:
     try:
-        time.sleep(seconds)
-    finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=5)
+        attrs = termios.tcgetattr(fd)
+        attrs[0] = 0
+        attrs[1] = 0
+        attrs[3] = 0
+        attrs[6][termios.VMIN] = 0
+        attrs[6][termios.VTIME] = 0
+        speed_attr = f"B{baud}"
+        speed = getattr(termios, speed_attr, None)
+        if speed is not None:
+            attrs[4] = speed
+            attrs[5] = speed
+        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    except Exception:
+        pass
+
+    deadline = time.time() + seconds
+    with open(log_path, "w", encoding="utf-8", errors="replace") as log:
+        while time.time() < deadline:
+            ready, _, _ = select.select([fd], [], [], 1.0)
+            if not ready:
+                continue
+            chunk = os.read(fd, 4096)
+            if not chunk:
+                continue
+            log.write(chunk.decode("utf-8", errors="replace"))
+            log.flush()
+finally:
+    os.close(fd)
 PY
 
     printf '\nCaptured monitor log:\n'

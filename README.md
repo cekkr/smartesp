@@ -19,7 +19,7 @@ This repository now contains a buildable ESP-IDF project skeleton with:
 - a native watch shell in C for boot and launcher/status surfaces
 - a WASM runtime layer with host bindings and SD-backed spill/load hooks
 - a process manager that marks apps as `always resident`, `resident while active`, `hibernable`, or `disposable`
-- an embedded demo WASM app proving end-to-end execution through `fayasm`
+- embedded demo WASM apps proving end-to-end execution through `fayasm`, including a live clock tick compiled from C with Emscripten
 
 ## Repository Layout
 
@@ -32,8 +32,10 @@ Use this map first when navigating the code:
 - [`components/watch_os/src/kernel/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/kernel) contains the process catalog and residency policy logic.
 - [`components/watch_os/src/runtime/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/runtime) contains the `fayasm` integration and host bindings.
 - [`components/watch_os/src/storage/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/storage) contains SD/runtime blob helpers used for hibernation.
-- [`components/watch_os/src/apps/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps) defines built-in app descriptors and the embedded demo WASM.
+- [`components/watch_os/src/apps/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps) defines built-in app descriptors and the embedded demo WASM headers.
 - [`components/fayasm_port/`](/Users/riccardo/Sources/GitHub/smartesp/components/fayasm_port) wraps upstream `fayasm` sources as an ESP-IDF component.
+- [`wasm_apps/`](/Users/riccardo/Sources/GitHub/smartesp/wasm_apps) holds the source for built-in WASM apps that are compiled into embedded headers.
+- [`scripts/build_clock_demo_wasm.sh`](/Users/riccardo/Sources/GitHub/smartesp/scripts/build_clock_demo_wasm.sh) recompiles the clock demo with Emscripten and refreshes the embedded header consumed by ESP-IDF.
 - [`external/fayasm`](/Users/riccardo/Sources/GitHub/smartesp/external/fayasm) is the upstream runtime submodule. If you modify it, commit inside that repository.
 
 ## Runtime Model
@@ -74,7 +76,7 @@ The scaffold assumes `/sdcard` is mounted by the platform integration. `smartesp
 
 If `/sdcard` is not mounted, the system still boots, but SD-backed hibernation stays unavailable and disposable apps behave as cold-start workloads.
 
-## Built-In Demo
+## Built-In Demos
 
 The built-in `wasm.demo.add` application embeds a tiny WASM module that imports `env.host_add` and exports `run`. This demonstrates:
 
@@ -82,6 +84,14 @@ The built-in `wasm.demo.add` application embeds a tiny WASM module that imports 
 - binding native host functions
 - executing an exported function through `fayasm`
 - capturing the last result for the native shell
+
+The built-in `wasm.demo.clock` application is authored in C at [`wasm_apps/clock_demo/clock_demo.c`](/Users/riccardo/Sources/GitHub/smartesp/wasm_apps/clock_demo/clock_demo.c), compiled to WASM with Emscripten, and embedded via [`components/watch_os/src/apps/clock_demo_wasm.h`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/clock_demo_wasm.h). It imports `env.host_time_ms`, converts uptime to `HHMMSS`, updates the native shell once per second, and is built with a constrained initial memory/stack so it fits the ESP32-S3 runtime budget.
+
+If you change the clock demo source, regenerate the embedded header before building firmware:
+
+```bash
+./scripts/build_clock_demo_wasm.sh
+```
 
 ## Build
 
@@ -94,6 +104,7 @@ git submodule update --init --recursive
 2. Build with ESP-IDF 5.4+:
 
 ```bash
+./scripts/build_clock_demo_wasm.sh
 idf.py set-target esp32s3
 idf.py build
 ```
@@ -130,12 +141,13 @@ Default ESP-IDF path:
 
 - `/Users/riccardo/esp/esp-idf-v6.0.1`
 
-The built-in `smoke-ui` scenario validates native UI/runtime milestones through serial logs:
+The built-in `smoke-ui` scenario validates native UI/runtime milestones through serial logs. In non-interactive environments, the script falls back to a direct raw serial capture instead of `idf_monitor`.
 
 - `boot-ui stage="display ready" progress=10`
 - `boot-ui stage="entering shell" progress=100`
 - `shell-ui rendered`
 - `demo app wasm.demo.add result=12`
+- `clock demo wasm.demo.clock time=`
 - `smartesp started`
 
 This is log-driven UI smoke validation, not touch-injection automation. If you later add hardware touch automation, extend this script rather than replacing it.

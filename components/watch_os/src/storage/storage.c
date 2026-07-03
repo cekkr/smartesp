@@ -1,5 +1,6 @@
 #include "storage.h"
 
+#include <inttypes.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -117,7 +118,7 @@ esp_err_t watch_storage_make_blob_path(const watch_storage_t *storage,
     }
 
     sanitize_id(app_id, safe_id, sizeof(safe_id));
-    snprintf(out, out_size, "%s/%s_%s_%u.bin", storage->runtime_dir, safe_id, kind, index);
+    snprintf(out, out_size, "%s/%s_%s_%" PRIu32 ".bin", storage->runtime_dir, safe_id, kind, index);
     return ESP_OK;
 }
 

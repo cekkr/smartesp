@@ -7,7 +7,7 @@
 typedef struct {
     char headline[96];
     char memory_line[96];
-    char apps_line[320];
+    char apps_line[512];
     char footer[96];
 } watch_ui_shell_model_t;
 

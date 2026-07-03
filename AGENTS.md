@@ -19,8 +19,10 @@ This file is the fast path for future agents working on `smartesp`. Keep it curr
 - Main build command: `idf.py build`
 - Flash/monitor: `idf.py flash monitor`
 - Primary validation script: `./tests/test_idf_build.sh`
+- Regenerate the built-in clock WASM after editing it: `./scripts/build_clock_demo_wasm.sh`
 - Default local ESP-IDF path on this machine: `/Users/riccardo/esp/esp-idf-v6.0.1`
 - Use `./tests/test_idf_build.sh --no-clean` for incremental reruns when the target is unchanged.
+- `./tests/test_idf_build.sh --monitor` now resets the board and captures raw serial logs directly, so it works even when `idf_monitor` cannot attach to a TTY.
 
 If you cannot run an ESP-IDF build in the current environment, say so clearly in the handoff.
 
@@ -36,8 +38,11 @@ Start from these files:
 - [`components/watch_os/src/runtime/wasm_runtime.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/runtime/wasm_runtime.c): `fayasm` execution, host bindings, spill/load hooks.
 - [`components/watch_os/src/storage/storage.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/storage/storage.c): runtime blob paths and file helpers.
 - [`components/watch_os/src/apps/app_catalog.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/app_catalog.c): built-in app registry.
+- [`components/watch_os/src/apps/clock_demo_wasm.h`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/clock_demo_wasm.h): generated Emscripten-built clock demo bytes embedded into firmware.
 - [`components/watch_os/src/apps/sample_add_wasm.h`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/sample_add_wasm.h): embedded demo WASM bytes.
 - [`components/fayasm_port/CMakeLists.txt`](/Users/riccardo/Sources/GitHub/smartesp/components/fayasm_port/CMakeLists.txt): ESP-IDF wrapper over upstream `fayasm`.
+- [`wasm_apps/clock_demo/clock_demo.c`](/Users/riccardo/Sources/GitHub/smartesp/wasm_apps/clock_demo/clock_demo.c): C source for the built-in clock demo app compiled to WASM with Emscripten.
+- [`scripts/build_clock_demo_wasm.sh`](/Users/riccardo/Sources/GitHub/smartesp/scripts/build_clock_demo_wasm.sh): regenerates the embedded clock demo header from the C source.
 - [`tests/test_idf_build.sh`](/Users/riccardo/Sources/GitHub/smartesp/tests/test_idf_build.sh): compile and optional flash/serial smoke validation.
 
 ## Execution Model
@@ -72,6 +77,7 @@ When changing policy behavior:
 - The scaffold expects `/sdcard` to be mounted externally.
 - Runtime spill blobs go under `/sdcard/smartesp/runtime/`.
 - External WASM apps should converge on `/sdcard/apps/<app>/app.wasm`.
+- Built-in Emscripten-generated WASM headers should be regenerated from `wasm_apps/` sources before firmware builds when those sources change.
 - If you add manifests, document the schema in `README.md` and link it here.
 
 ## `fayasm` Rules

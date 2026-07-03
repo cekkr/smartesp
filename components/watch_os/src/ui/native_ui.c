@@ -1,5 +1,6 @@
 #include "native_ui.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -21,6 +22,11 @@ static lv_obj_t *s_shell_memory;
 static lv_obj_t *s_shell_apps;
 static lv_obj_t *s_shell_footer;
 
+typedef struct {
+    lv_coord_t left;
+    lv_coord_t width;
+} watch_ui_safe_zone_t;
+
 static void style_screen(lv_obj_t *screen)
 {
     lv_obj_set_style_bg_color(screen, lv_color_hex(0x09090b), 0);
@@ -41,18 +47,17 @@ static void ensure_boot_screen(void)
     lv_label_set_text(s_boot_title, "smartesp");
     lv_obj_set_style_text_font(s_boot_title, &lv_font_montserrat_32, 0);
     lv_obj_set_style_text_color(s_boot_title, lv_color_hex(0x68f0d5), 0);
-    lv_obj_align(s_boot_title, LV_ALIGN_TOP_MID, 0, 70);
+    lv_obj_set_style_text_align(s_boot_title, LV_TEXT_ALIGN_CENTER, 0);
 
     s_boot_stage = lv_label_create(s_boot_screen);
     lv_label_set_text(s_boot_stage, "preparing watch shell");
     lv_obj_set_style_text_font(s_boot_stage, &lv_font_montserrat_14, 0);
-    lv_obj_align_to(s_boot_stage, s_boot_title, LV_ALIGN_OUT_BOTTOM_MID, 0, 18);
+    lv_obj_set_style_text_align(s_boot_stage, LV_TEXT_ALIGN_CENTER, 0);
 
     s_boot_bar = lv_bar_create(s_boot_screen);
     lv_obj_set_size(s_boot_bar, 220, 12);
     lv_obj_set_style_bg_color(s_boot_bar, lv_color_hex(0x1f2937), LV_PART_MAIN);
     lv_obj_set_style_bg_color(s_boot_bar, lv_color_hex(0xf97316), LV_PART_INDICATOR);
-    lv_obj_align_to(s_boot_bar, s_boot_stage, LV_ALIGN_OUT_BOTTOM_MID, 0, 24);
     lv_bar_set_range(s_boot_bar, 0, 100);
 }
 
@@ -69,26 +74,23 @@ static void ensure_shell_screen(void)
     lv_label_set_text(s_shell_title, "smartesp");
     lv_obj_set_style_text_font(s_shell_title, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(s_shell_title, lv_color_hex(0x68f0d5), 0);
-    lv_obj_align(s_shell_title, LV_ALIGN_TOP_LEFT, 20, 18);
+    lv_obj_set_style_text_align(s_shell_title, LV_TEXT_ALIGN_LEFT, 0);
 
     s_shell_headline = lv_label_create(s_shell_screen);
-    lv_obj_set_width(s_shell_headline, 360);
     lv_label_set_long_mode(s_shell_headline, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(s_shell_headline, &lv_font_montserrat_14, 0);
-    lv_obj_align_to(s_shell_headline, s_shell_title, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 12);
+    lv_obj_set_style_text_align(s_shell_headline, LV_TEXT_ALIGN_LEFT, 0);
 
     s_shell_memory = lv_label_create(s_shell_screen);
-    lv_obj_set_width(s_shell_memory, 360);
     lv_label_set_long_mode(s_shell_memory, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(s_shell_memory, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(s_shell_memory, lv_color_hex(0xfde68a), 0);
-    lv_obj_align_to(s_shell_memory, s_shell_headline, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 14);
+    lv_obj_set_style_text_align(s_shell_memory, LV_TEXT_ALIGN_LEFT, 0);
 
     s_shell_apps = lv_label_create(s_shell_screen);
-    lv_obj_set_width(s_shell_apps, 370);
     lv_label_set_long_mode(s_shell_apps, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(s_shell_apps, &lv_font_montserrat_12, 0);
-    lv_obj_align_to(s_shell_apps, s_shell_memory, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 14);
+    lv_obj_set_style_text_align(s_shell_apps, LV_TEXT_ALIGN_LEFT, 0);
 
     s_shell_footer = lv_label_create(s_shell_screen);
     lv_obj_set_width(s_shell_footer, 360);
@@ -96,6 +98,119 @@ static void ensure_shell_screen(void)
     lv_obj_set_style_text_color(s_shell_footer, lv_color_hex(0x94a3b8), 0);
     lv_obj_set_style_text_font(s_shell_footer, &lv_font_montserrat_12, 0);
     lv_obj_align(s_shell_footer, LV_ALIGN_BOTTOM_LEFT, 20, -22);
+}
+
+static void screen_size(lv_coord_t *width_out, lv_coord_t *height_out)
+{
+    lv_display_t *display = watch_board_display();
+
+    if (display == NULL) {
+        if (width_out != NULL) {
+            *width_out = 410;
+        }
+        if (height_out != NULL) {
+            *height_out = 502;
+        }
+        return;
+    }
+
+    if (width_out != NULL) {
+        *width_out = (lv_coord_t)lv_display_get_horizontal_resolution(display);
+    }
+    if (height_out != NULL) {
+        *height_out = (lv_coord_t)lv_display_get_vertical_resolution(display);
+    }
+}
+
+static watch_ui_safe_zone_t top_safe_zone_for_band(lv_coord_t y, lv_coord_t height, lv_coord_t base_padding)
+{
+    lv_coord_t width = 410;
+    lv_coord_t height_px = 502;
+    lv_coord_t inset = base_padding;
+    const lv_coord_t min_content_width = 180;
+    const lv_coord_t band_mid = y + (height / 2);
+
+    screen_size(&width, &height_px);
+
+    if (band_mid < LV_MIN(width / 4, height_px / 5)) {
+        const float radius = (float)LV_MIN(width / 4, height_px / 5);
+        const float offset = radius - (float)band_mid;
+        const float curve = radius - sqrtf((radius * radius) - (offset * offset));
+        inset += (lv_coord_t)(curve + 0.5f);
+    }
+
+    if ((inset * 2) > (width - min_content_width)) {
+        inset = (width - min_content_width) / 2;
+    }
+
+    watch_ui_safe_zone_t zone = {
+        .left = inset,
+        .width = width - (inset * 2),
+    };
+    return zone;
+}
+
+static void place_top_label_left(lv_obj_t *obj, lv_coord_t y, lv_coord_t base_padding)
+{
+    watch_ui_safe_zone_t zone;
+
+    lv_obj_set_width(obj, LV_SIZE_CONTENT);
+    lv_obj_update_layout(obj);
+    zone = top_safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
+    lv_obj_set_width(obj, zone.width);
+    lv_obj_set_pos(obj, zone.left, y);
+    lv_obj_update_layout(obj);
+}
+
+static void place_top_label_centered(lv_obj_t *obj, lv_coord_t y, lv_coord_t base_padding)
+{
+    watch_ui_safe_zone_t zone;
+
+    lv_obj_set_width(obj, LV_SIZE_CONTENT);
+    lv_obj_update_layout(obj);
+    zone = top_safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
+    lv_obj_set_width(obj, zone.width);
+    lv_obj_set_pos(obj, zone.left, y);
+    lv_obj_update_layout(obj);
+}
+
+static void place_top_bar_centered(lv_obj_t *obj, lv_coord_t y, lv_coord_t width_hint, lv_coord_t base_padding)
+{
+    watch_ui_safe_zone_t zone = top_safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
+    const lv_coord_t width = LV_MIN(width_hint, zone.width);
+    const lv_coord_t left = zone.left + ((zone.width - width) / 2);
+
+    lv_obj_set_size(obj, width, lv_obj_get_height(obj));
+    lv_obj_set_pos(obj, left, y);
+}
+
+static void layout_boot_screen(void)
+{
+    const lv_coord_t title_y = 62;
+    lv_coord_t stage_y;
+    lv_coord_t bar_y;
+
+    place_top_label_centered(s_boot_title, title_y, 22);
+    stage_y = title_y + lv_obj_get_height(s_boot_title) + 18;
+    place_top_label_centered(s_boot_stage, stage_y, 22);
+    bar_y = stage_y + lv_obj_get_height(s_boot_stage) + 24;
+    place_top_bar_centered(s_boot_bar, bar_y, 220, 22);
+}
+
+static void layout_shell_screen(void)
+{
+    lv_coord_t y = 18;
+
+    place_top_label_left(s_shell_title, y, 20);
+    y += lv_obj_get_height(s_shell_title) + 12;
+
+    place_top_label_left(s_shell_headline, y, 20);
+    y += lv_obj_get_height(s_shell_headline) + 14;
+
+    place_top_label_left(s_shell_memory, y, 20);
+    y += lv_obj_get_height(s_shell_memory) + 14;
+
+    place_top_label_left(s_shell_apps, y, 20);
 }
 
 esp_err_t watch_native_ui_show_boot(const char *stage, uint8_t progress)
@@ -108,6 +223,7 @@ esp_err_t watch_native_ui_show_boot(const char *stage, uint8_t progress)
     ensure_boot_screen();
     lv_label_set_text(s_boot_stage, (stage != NULL) ? stage : "booting");
     lv_bar_set_value(s_boot_bar, progress, LV_ANIM_ON);
+    layout_boot_screen();
     lv_screen_load(s_boot_screen);
     ESP_LOGI(TAG, "boot-ui stage=\"%s\" progress=%u", (stage != NULL) ? stage : "booting", (unsigned)progress);
 
@@ -131,6 +247,7 @@ esp_err_t watch_native_ui_show_shell(const watch_ui_shell_model_t *model)
     lv_label_set_text(s_shell_memory, model->memory_line);
     lv_label_set_text(s_shell_apps, model->apps_line);
     lv_label_set_text(s_shell_footer, model->footer);
+    layout_shell_screen();
     lv_screen_load(s_shell_screen);
     ESP_LOGI(TAG, "shell-ui rendered");
 

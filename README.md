@@ -32,10 +32,12 @@ Use this map first when navigating the code:
 - [`components/watch_os/src/kernel/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/kernel) contains the process catalog and residency policy logic.
 - [`components/watch_os/src/runtime/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/runtime) contains the `fayasm` integration and host bindings.
 - [`components/watch_os/src/storage/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/storage) contains SD/runtime blob helpers used for hibernation.
+- [`components/watch_os/src/io/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/io) contains serial-side helpers, including the USB/UART WASM uploader that writes app payloads onto the SD card.
 - [`components/watch_os/src/apps/`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps) defines built-in app descriptors and the embedded demo WASM headers.
 - [`components/fayasm_port/`](/Users/riccardo/Sources/GitHub/smartesp/components/fayasm_port) wraps upstream `fayasm` sources as an ESP-IDF component.
 - [`wasm_apps/`](/Users/riccardo/Sources/GitHub/smartesp/wasm_apps) holds the source for built-in WASM apps that are compiled into embedded headers.
 - [`scripts/build_clock_demo_wasm.sh`](/Users/riccardo/Sources/GitHub/smartesp/scripts/build_clock_demo_wasm.sh) recompiles the clock demo with Emscripten and refreshes the embedded header consumed by ESP-IDF.
+- [`scripts/push_wasm_serial.py`](/Users/riccardo/Sources/GitHub/smartesp/scripts/push_wasm_serial.py) uploads an external `app.wasm` to `/sdcard/apps/<app>/app.wasm` over the same USB serial link used for logs.
 - [`external/fayasm`](/Users/riccardo/Sources/GitHub/smartesp/external/fayasm) is the upstream runtime submodule. If you modify it, commit inside that repository.
 
 ## Runtime Model
@@ -67,14 +69,33 @@ Current runtime policy categories:
 - `WATCH_APP_RESIDENCY_HIBERNABLE`: spill JIT/memory state to SD when needed
 - `WATCH_APP_RESIDENCY_DISPOSABLE`: unload and recreate on demand
 
-## Storage and Hibernation
+## Storage, External Apps, and Hibernation
 
-The scaffold assumes `/sdcard` is mounted by the platform integration. `smartesp` then uses:
+`smartesp` now mounts the microSD card through the Waveshare BSP during boot when SD-backed runtime is enabled. The current expectation is a FAT32-formatted card. Once mounted, the OS uses:
 
 - `/sdcard/smartesp/runtime/` for `fayasm` spill blobs
 - `/sdcard/apps/<app>/app.wasm` as the expected convention for external WASM apps
 
-If `/sdcard` is not mounted, the system still boots, but SD-backed hibernation stays unavailable and disposable apps behave as cold-start workloads.
+If the card is missing or cannot be mounted, the system still boots, but SD-backed hibernation stays unavailable, serial WASM install stays disabled, and disposable apps behave as cold-start workloads.
+
+The native shell now applies a dynamic horizontal inset for top text bands so text near the rounded upper border is kept inside the visible safe area instead of using a fixed left margin everywhere.
+
+### Serial WASM Install
+
+Until Wi-Fi distribution exists, external WASM payloads can be pushed over USB serial directly onto the SD card. Firmware exposes a simple line-based uploader over stdio/UART:
+
+- `WASM-UPLOAD BEGIN <app> <bytes>`
+- `WASM-UPLOAD DATA <hex>`
+- `WASM-UPLOAD END`
+- `WASM-UPLOAD ABORT`
+
+Use the helper script:
+
+```bash
+./scripts/push_wasm_serial.py --port /dev/cu.usbmodem101 --app workout wasm_apps/build/clock_demo.wasm
+```
+
+If `--port` is omitted, the script tries `/dev/cu.usbmodem*` first and then `/dev/tty.usbmodem*`.
 
 ## Built-In Demos
 
@@ -137,6 +158,12 @@ Compile + flash + serial smoke validation:
 ./tests/test_idf_build.sh --flash --monitor --port /dev/cu.usbmodemXXXX
 ```
 
+External WASM transfer after flashing:
+
+```bash
+./scripts/push_wasm_serial.py --port /dev/cu.usbmodem101 --app workout wasm_apps/build/clock_demo.wasm
+```
+
 Default ESP-IDF path:
 
 - `/Users/riccardo/esp/esp-idf-v6.0.1`
@@ -154,7 +181,6 @@ This is log-driven UI smoke validation, not touch-injection automation. If you l
 
 ## Notes for Future Work
 
-- Add real SD-card mounting for this board rather than only consuming an already-mounted `/sdcard`.
 - Add a manifest parser for external apps under `/sdcard/apps`.
 - Move the process manager from synchronous demo orchestration to long-lived tasks/process supervision.
 - Add native fallback UI paths for runtime faults and failed app resumes.

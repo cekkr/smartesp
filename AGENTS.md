@@ -37,12 +37,14 @@ Start from these files:
 - [`components/watch_os/src/kernel/process_manager.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/kernel/process_manager.c): app slots and residency policy.
 - [`components/watch_os/src/runtime/wasm_runtime.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/runtime/wasm_runtime.c): `fayasm` execution, host bindings, spill/load hooks.
 - [`components/watch_os/src/storage/storage.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/storage/storage.c): runtime blob paths and file helpers.
+- [`components/watch_os/src/io/serial_uploader.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/io/serial_uploader.c): USB/UART stdio protocol that installs external `app.wasm` payloads onto the SD card.
 - [`components/watch_os/src/apps/app_catalog.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/app_catalog.c): built-in app registry.
 - [`components/watch_os/src/apps/clock_demo_wasm.h`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/clock_demo_wasm.h): generated Emscripten-built clock demo bytes embedded into firmware.
 - [`components/watch_os/src/apps/sample_add_wasm.h`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/sample_add_wasm.h): embedded demo WASM bytes.
 - [`components/fayasm_port/CMakeLists.txt`](/Users/riccardo/Sources/GitHub/smartesp/components/fayasm_port/CMakeLists.txt): ESP-IDF wrapper over upstream `fayasm`.
 - [`wasm_apps/clock_demo/clock_demo.c`](/Users/riccardo/Sources/GitHub/smartesp/wasm_apps/clock_demo/clock_demo.c): C source for the built-in clock demo app compiled to WASM with Emscripten.
 - [`scripts/build_clock_demo_wasm.sh`](/Users/riccardo/Sources/GitHub/smartesp/scripts/build_clock_demo_wasm.sh): regenerates the embedded clock demo header from the C source.
+- [`scripts/push_wasm_serial.py`](/Users/riccardo/Sources/GitHub/smartesp/scripts/push_wasm_serial.py): host-side serial uploader for external WASM payloads.
 - [`tests/test_idf_build.sh`](/Users/riccardo/Sources/GitHub/smartesp/tests/test_idf_build.sh): compile and optional flash/serial smoke validation.
 
 ## Execution Model
@@ -74,9 +76,11 @@ When changing policy behavior:
 
 ## Storage Rules
 
-- The scaffold expects `/sdcard` to be mounted externally.
+- The watch OS mounts `/sdcard` through the Waveshare BSP when SD-backed runtime is enabled.
 - Runtime spill blobs go under `/sdcard/smartesp/runtime/`.
 - External WASM apps should converge on `/sdcard/apps/<app>/app.wasm`.
+- The current safe default for cards is FAT32.
+- During early development, external WASM payloads are transferred over USB serial with `./scripts/push_wasm_serial.py`, which speaks the device-side `WASM-UPLOAD` stdio protocol.
 - Built-in Emscripten-generated WASM headers should be regenerated from `wasm_apps/` sources before firmware builds when those sources change.
 - If you add manifests, document the schema in `README.md` and link it here.
 

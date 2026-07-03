@@ -7,6 +7,7 @@ idf_component_register(
         "src/kernel/process_manager.c"
         "src/runtime/wasm_runtime.c"
         "src/apps/app_catalog.c"
+        "src/io/serial_uploader.c"
     INCLUDE_DIRS
         "include"
     PRIV_INCLUDE_DIRS
@@ -17,6 +18,7 @@ idf_component_register(
         "src/runtime"
         "src/storage"
         "src/ui"
+        "src/io"
     REQUIRES
         fayasm_port
         lvgl

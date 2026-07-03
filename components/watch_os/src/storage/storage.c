@@ -7,7 +7,9 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
+#include "bsp/esp32_s3_touch_amoled_2_06.h"
 #include "esp_log.h"
 
 static const char *TAG = "watch_storage";
@@ -58,8 +60,39 @@ static esp_err_t ensure_directory(const char *path)
     return ESP_FAIL;
 }
 
+static esp_err_t ensure_parent_directories(const char *path)
+{
+    char partial[160];
+    size_t length;
+
+    if (path == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    length = strnlen(path, sizeof(partial));
+    if (length == 0 || length >= sizeof(partial)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memcpy(partial, path, length + 1);
+    for (size_t i = 1; i < length; ++i) {
+        if (partial[i] != '/') {
+            continue;
+        }
+
+        partial[i] = '\0';
+        if (ensure_directory(partial) != ESP_OK) {
+            return ESP_FAIL;
+        }
+        partial[i] = '/';
+    }
+
+    return ESP_OK;
+}
+
 esp_err_t watch_storage_init(watch_storage_t *storage, bool prefer_sdcard_runtime)
 {
+    esp_err_t mount_err;
     if (storage == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -67,26 +100,36 @@ esp_err_t watch_storage_init(watch_storage_t *storage, bool prefer_sdcard_runtim
     memset(storage, 0, sizeof(*storage));
     snprintf(storage->root, sizeof(storage->root), "/sdcard/smartesp");
     snprintf(storage->runtime_dir, sizeof(storage->runtime_dir), "%s/runtime", storage->root);
+    snprintf(storage->apps_dir, sizeof(storage->apps_dir), "/sdcard/apps");
 
     if (!prefer_sdcard_runtime) {
         ESP_LOGI(TAG, "sd-backed runtime disabled by config");
         return ESP_OK;
     }
 
+    mount_err = bsp_sdcard_mount();
+    if (mount_err != ESP_OK && mount_err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG,
+                 "microSD mount failed err=%s; insert a card formatted as FAT32 to enable runtime spill and external WASM loading",
+                 esp_err_to_name(mount_err));
+        return ESP_OK;
+    }
+
     struct stat sd_root = {0};
     if (stat("/sdcard", &sd_root) != 0 || !S_ISDIR(sd_root.st_mode)) {
-        ESP_LOGW(TAG, "/sdcard is not mounted, hibernation stays unavailable");
+        ESP_LOGW(TAG, "/sdcard mount point is unavailable, hibernation and serial WASM install stay disabled");
         return ESP_OK;
     }
 
     if (ensure_directory(storage->root) != ESP_OK ||
-        ensure_directory(storage->runtime_dir) != ESP_OK) {
+        ensure_directory(storage->runtime_dir) != ESP_OK ||
+        ensure_directory(storage->apps_dir) != ESP_OK) {
         ESP_LOGW(TAG, "runtime directories could not be prepared");
         return ESP_FAIL;
     }
 
     storage->mounted = true;
-    ESP_LOGI(TAG, "runtime storage ready at %s", storage->runtime_dir);
+    ESP_LOGI(TAG, "runtime storage ready at %s (apps under %s)", storage->runtime_dir, storage->apps_dir);
     return ESP_OK;
 }
 
@@ -98,6 +141,51 @@ bool watch_storage_available(const watch_storage_t *storage)
 const char *watch_storage_root(const watch_storage_t *storage)
 {
     return (storage != NULL) ? storage->runtime_dir : "";
+}
+
+const char *watch_storage_apps_root(const watch_storage_t *storage)
+{
+    return (storage != NULL) ? storage->apps_dir : "";
+}
+
+bool watch_storage_file_exists(const char *path)
+{
+    struct stat st = {0};
+
+    return (path != NULL) && (stat(path, &st) == 0) && S_ISREG(st.st_mode);
+}
+
+esp_err_t watch_storage_make_app_wasm_path(const watch_storage_t *storage,
+                                           const char *app_slug,
+                                           char *out,
+                                           size_t out_size)
+{
+    char safe_id[48];
+
+    if ((storage == NULL) || (app_slug == NULL) || (out == NULL) || (out_size == 0)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!watch_storage_available(storage)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    sanitize_id(app_slug, safe_id, sizeof(safe_id));
+    snprintf(out, out_size, "%s/%s/app.wasm", storage->apps_dir, safe_id);
+    return ESP_OK;
+}
+
+esp_err_t watch_storage_prepare_external_wasm_path(const watch_storage_t *storage, const char *path)
+{
+    if ((storage == NULL) || (path == NULL)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!watch_storage_available(storage)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    return ensure_parent_directories(path);
 }
 
 esp_err_t watch_storage_make_blob_path(const watch_storage_t *storage,

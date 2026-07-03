@@ -12,6 +12,7 @@
 #include "freertos/task.h"
 #include "native_ui.h"
 #include "process_manager.h"
+#include "serial_uploader.h"
 #include "storage.h"
 #include "wasm_runtime.h"
 #include "watch_board.h"
@@ -27,6 +28,23 @@ typedef struct {
 
 static const char *TAG = "watch_os";
 static watch_os_state_t s_state;
+
+static void prepare_external_app_storage(const watch_os_app_descriptor_t *catalog, size_t count)
+{
+    if ((catalog == NULL) || !watch_storage_available(&s_state.storage)) {
+        return;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        if (catalog[i].storage_path == NULL) {
+            continue;
+        }
+
+        if (watch_storage_prepare_external_wasm_path(&s_state.storage, catalog[i].storage_path) != ESP_OK) {
+            ESP_LOGW(TAG, "could not prepare storage path for %s", catalog[i].id);
+        }
+    }
+}
 
 static bool format_clock_result(int32_t encoded, char *buffer, size_t buffer_size)
 {
@@ -68,8 +86,10 @@ static void update_shell_ui(void)
              pressure ? "yes" : "no");
     snprintf(model.footer,
              sizeof(model.footer),
-             "storage: %s",
-             watch_storage_available(&s_state.storage) ? watch_storage_root(&s_state.storage) : "not mounted");
+             watch_storage_available(&s_state.storage)
+                 ? "storage: %s\nserial upload: WASM-UPLOAD BEGIN <app> <bytes>"
+                 : "storage: unavailable (insert FAT32 microSD)\nserial upload: disabled",
+             watch_storage_available(&s_state.storage) ? watch_storage_root(&s_state.storage) : "");
 
     used += snprintf(model.apps_line + used,
                      sizeof(model.apps_line) - used,
@@ -91,11 +111,14 @@ static void update_shell_ui(void)
 
         used += snprintf(model.apps_line + used,
                          sizeof(model.apps_line) - used,
-                         "- %s [%s/%s]%s\n",
+                         "- %s [%s/%s]%s%s\n",
                          process->app->title,
                          watch_process_state_label(process->state),
                          watch_residency_label(process->app->residency),
-                         process->resident_in_ram ? " resident" : "");
+                         process->resident_in_ram ? " resident" : "",
+                         process->app->storage_path == NULL
+                             ? ""
+                             : (watch_storage_file_exists(process->app->storage_path) ? " sd-ready" : " sd-missing"));
 
         if (process->has_last_result && used + 24 < sizeof(model.apps_line)) {
             used += snprintf(model.apps_line + used,
@@ -245,6 +268,7 @@ esp_err_t watch_os_start(const watch_os_config_t *config)
                                s_state.config.internal_ram_floor_bytes,
                                s_state.config.psram_floor_bytes);
     watch_process_manager_register_catalog(&s_state.process_manager, catalog, app_count);
+    prepare_external_app_storage(catalog, app_count);
 
     ESP_RETURN_ON_ERROR(watch_native_ui_show_boot("registering apps", 80), TAG, "boot ui failed");
     (void)launch_demo_app_if_enabled();
@@ -252,6 +276,7 @@ esp_err_t watch_os_start(const watch_os_config_t *config)
 
     ESP_RETURN_ON_ERROR(watch_native_ui_show_boot("entering shell", 100), TAG, "boot ui failed");
     update_shell_ui();
+    (void)watch_serial_uploader_start(&s_state.storage);
 
     if (s_state.maintenance_task == NULL) {
         BaseType_t created = xTaskCreatePinnedToCore(maintenance_task,

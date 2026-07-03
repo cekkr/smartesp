@@ -16,6 +16,8 @@ idf_component_register(
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC
     FAYASM_TARGET_ESP32=1
-    FAYASM_TARGET_RAM_BYTES=(520ULL*1024ULL)
+    FAYASM_TARGET_RAM_BYTES=532480ULL
     FAYASM_TARGET_CPU_COUNT=2U
 )
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-error)

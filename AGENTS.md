@@ -18,6 +18,9 @@ This file is the fast path for future agents working on `smartesp`. Keep it curr
 - Expected reference board: Waveshare ESP32-S3 Touch AMOLED 2.06
 - Main build command: `idf.py build`
 - Flash/monitor: `idf.py flash monitor`
+- Primary validation script: `./tests/test_idf_build.sh`
+- Default local ESP-IDF path on this machine: `/Users/riccardo/esp/esp-idf-v6.0.1`
+- Use `./tests/test_idf_build.sh --no-clean` for incremental reruns when the target is unchanged.
 
 If you cannot run an ESP-IDF build in the current environment, say so clearly in the handoff.
 
@@ -35,6 +38,7 @@ Start from these files:
 - [`components/watch_os/src/apps/app_catalog.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/app_catalog.c): built-in app registry.
 - [`components/watch_os/src/apps/sample_add_wasm.h`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/sample_add_wasm.h): embedded demo WASM bytes.
 - [`components/fayasm_port/CMakeLists.txt`](/Users/riccardo/Sources/GitHub/smartesp/components/fayasm_port/CMakeLists.txt): ESP-IDF wrapper over upstream `fayasm`.
+- [`tests/test_idf_build.sh`](/Users/riccardo/Sources/GitHub/smartesp/tests/test_idf_build.sh): compile and optional flash/serial smoke validation.
 
 ## Execution Model
 

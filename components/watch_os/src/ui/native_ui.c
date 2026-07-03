@@ -109,6 +109,7 @@ esp_err_t watch_native_ui_show_boot(const char *stage, uint8_t progress)
     lv_label_set_text(s_boot_stage, (stage != NULL) ? stage : "booting");
     lv_bar_set_value(s_boot_bar, progress, LV_ANIM_ON);
     lv_screen_load(s_boot_screen);
+    ESP_LOGI(TAG, "boot-ui stage=\"%s\" progress=%u", (stage != NULL) ? stage : "booting", (unsigned)progress);
 
     watch_board_unlock();
     return ESP_OK;
@@ -131,6 +132,7 @@ esp_err_t watch_native_ui_show_shell(const watch_ui_shell_model_t *model)
     lv_label_set_text(s_shell_apps, model->apps_line);
     lv_label_set_text(s_shell_footer, model->footer);
     lv_screen_load(s_shell_screen);
+    ESP_LOGI(TAG, "shell-ui rendered");
 
     watch_board_unlock();
     return ESP_OK;

@@ -1,0 +1,264 @@
+#!/bin/sh
+
+set -eu
+
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+IDF_PATH_DEFAULT="/Users/riccardo/esp/esp-idf-v6.0.1"
+IDF_PATH_INPUT="${IDF_PATH:-$IDF_PATH_DEFAULT}"
+BUILD_DIR="${BUILD_DIR:-build-test}"
+TARGET="${TARGET:-esp32s3}"
+PORT="${PORT:-}"
+BAUD="${BAUD:-921600}"
+MONITOR_SECONDS="${MONITOR_SECONDS:-20}"
+SCENARIO="${SCENARIO:-smoke-ui}"
+DO_FLASH=0
+DO_MONITOR=0
+DO_CLEAN=1
+SHOW_HELP=0
+EXPECT_LOGS=""
+
+usage() {
+    cat <<EOF
+Usage: $0 [options]
+
+Compile validation:
+  $0
+
+Compile + flash + serial smoke validation:
+  $0 --flash --monitor --port /dev/cu.usbmodemXXXX
+
+Options:
+  --idf-path PATH         ESP-IDF root. Default: $IDF_PATH_DEFAULT
+  --build-dir DIR         Build directory. Default: $BUILD_DIR
+  --target CHIP           IDF target. Default: $TARGET
+  --port DEVICE           Serial device for flash/monitor
+  --baud RATE             Serial baud. Default: $BAUD
+  --flash                 Flash firmware after successful build
+  --monitor               Capture serial logs and assert expected markers
+  --monitor-seconds N     Seconds to observe serial output. Default: $MONITOR_SECONDS
+  --scenario NAME         Built-in assertion set. Default: $SCENARIO
+  --expect-log TEXT       Additional log line fragment to require
+  --no-clean              Skip idf.py fullclean
+  --help                  Show this help
+
+Built-in scenarios:
+  smoke-ui
+    Requires the firmware to emit:
+    - boot-ui stage="display ready" progress=10
+    - boot-ui stage="entering shell" progress=100
+    - shell-ui rendered
+    - demo app wasm.demo.add result=12
+    - smartesp started
+EOF
+}
+
+fail() {
+    printf 'ERROR: %s\n' "$*" >&2
+    exit 1
+}
+
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"
+}
+
+run_in_idf_env() {
+    bash -lc '
+        set -eu
+        IDF_ROOT=$1
+        PROJECT_ROOT=$2
+        shift 2
+        . "$IDF_ROOT/export.sh" >/dev/null
+        cd "$PROJECT_ROOT"
+        "$@"
+    ' sh "$IDF_PATH_INPUT" "$ROOT_DIR" "$@"
+}
+
+project_target_matches() {
+    [ -f "$ROOT_DIR/sdkconfig" ] && grep -F "CONFIG_IDF_TARGET=\"$TARGET\"" "$ROOT_DIR/sdkconfig" >/dev/null 2>&1
+}
+
+append_expect_log() {
+    if [ -z "$EXPECT_LOGS" ]; then
+        EXPECT_LOGS=$1
+    else
+        EXPECT_LOGS=$(printf '%s\n%s' "$EXPECT_LOGS" "$1")
+    fi
+}
+
+detect_port() {
+    for candidate in /dev/cu.usbmodem* /dev/cu.usbserial* /dev/tty.usbmodem* /dev/tty.usbserial*; do
+        if [ -e "$candidate" ]; then
+            PORT=$candidate
+            return 0
+        fi
+    done
+    return 1
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --idf-path)
+            [ $# -ge 2 ] || fail "--idf-path requires a value"
+            IDF_PATH_INPUT=$2
+            shift 2
+            ;;
+        --build-dir)
+            [ $# -ge 2 ] || fail "--build-dir requires a value"
+            BUILD_DIR=$2
+            shift 2
+            ;;
+        --target)
+            [ $# -ge 2 ] || fail "--target requires a value"
+            TARGET=$2
+            shift 2
+            ;;
+        --port)
+            [ $# -ge 2 ] || fail "--port requires a value"
+            PORT=$2
+            shift 2
+            ;;
+        --baud)
+            [ $# -ge 2 ] || fail "--baud requires a value"
+            BAUD=$2
+            shift 2
+            ;;
+        --flash)
+            DO_FLASH=1
+            shift
+            ;;
+        --monitor)
+            DO_MONITOR=1
+            shift
+            ;;
+        --monitor-seconds)
+            [ $# -ge 2 ] || fail "--monitor-seconds requires a value"
+            MONITOR_SECONDS=$2
+            shift 2
+            ;;
+        --scenario)
+            [ $# -ge 2 ] || fail "--scenario requires a value"
+            SCENARIO=$2
+            shift 2
+            ;;
+        --expect-log)
+            [ $# -ge 2 ] || fail "--expect-log requires a value"
+            append_expect_log "$2"
+            shift 2
+            ;;
+        --no-clean)
+            DO_CLEAN=0
+            shift
+            ;;
+        --help)
+            SHOW_HELP=1
+            shift
+            ;;
+        *)
+            fail "unknown argument: $1"
+            ;;
+    esac
+done
+
+if [ "$SHOW_HELP" -eq 1 ]; then
+    usage
+    exit 0
+fi
+
+require_cmd python3
+require_cmd bash
+require_cmd git
+
+[ -d "$IDF_PATH_INPUT" ] || fail "ESP-IDF path not found: $IDF_PATH_INPUT"
+[ -f "$IDF_PATH_INPUT/export.sh" ] || fail "missing export.sh under: $IDF_PATH_INPUT"
+[ -e "$ROOT_DIR/external/fayasm/.git" ] || fail "fayasm submodule is not initialized"
+
+case "$SCENARIO" in
+    smoke-ui)
+        append_expect_log 'boot-ui stage="display ready" progress=10'
+        append_expect_log 'boot-ui stage="entering shell" progress=100'
+        append_expect_log 'shell-ui rendered'
+        append_expect_log 'demo app wasm.demo.add result=12'
+        append_expect_log 'smartesp started'
+        ;;
+    none)
+        ;;
+    *)
+        fail "unknown scenario: $SCENARIO"
+        ;;
+esac
+
+if [ "$DO_FLASH" -eq 1 ] || [ "$DO_MONITOR" -eq 1 ]; then
+    if [ -z "$PORT" ]; then
+        detect_port || fail "no serial port detected; pass --port explicitly"
+    fi
+fi
+
+printf 'Using ESP-IDF: %s\n' "$IDF_PATH_INPUT"
+printf 'Project root: %s\n' "$ROOT_DIR"
+printf 'Build dir: %s\n' "$BUILD_DIR"
+printf 'Target: %s\n' "$TARGET"
+if [ -n "$PORT" ]; then
+    printf 'Serial port: %s\n' "$PORT"
+fi
+
+MONITOR_LOG=$(mktemp)
+cleanup() {
+    rm -f "$MONITOR_LOG"
+}
+trap cleanup EXIT INT TERM
+
+cd "$ROOT_DIR"
+
+git submodule update --init --recursive
+
+if [ "$DO_CLEAN" -eq 1 ]; then
+    run_in_idf_env idf.py -B "$BUILD_DIR" fullclean >/dev/null 2>&1 || true
+    run_in_idf_env idf.py -B "$BUILD_DIR" set-target "$TARGET"
+elif project_target_matches; then
+    run_in_idf_env idf.py -B "$BUILD_DIR" reconfigure
+else
+    run_in_idf_env idf.py -B "$BUILD_DIR" set-target "$TARGET"
+fi
+
+run_in_idf_env idf.py -B "$BUILD_DIR" build
+
+if [ "$DO_FLASH" -eq 1 ]; then
+    run_in_idf_env idf.py -B "$BUILD_DIR" -p "$PORT" -b "$BAUD" flash
+fi
+
+if [ "$DO_MONITOR" -eq 1 ]; then
+    run_in_idf_env python3 - "$BUILD_DIR" "$PORT" "$BAUD" "$MONITOR_SECONDS" "$MONITOR_LOG" <<'PY'
+import subprocess
+import sys
+import time
+
+build_dir, port, baud, seconds, log_path = sys.argv[1:]
+seconds = int(seconds)
+cmd = ["idf.py", "-B", build_dir, "-p", port, "-b", baud, "monitor"]
+with open(log_path, "w", encoding="utf-8", errors="replace") as log:
+    proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+    try:
+        time.sleep(seconds)
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+PY
+
+    printf '\nCaptured monitor log:\n'
+    sed -n '1,220p' "$MONITOR_LOG"
+
+    if [ -n "$EXPECT_LOGS" ]; then
+        printf '%s\n' "$EXPECT_LOGS" | while IFS= read -r expected; do
+            [ -n "$expected" ] || continue
+            if ! grep -F -- "$expected" "$MONITOR_LOG" >/dev/null 2>&1; then
+                fail "missing expected monitor log: $expected"
+            fi
+        done
+    fi
+fi
+
+printf '\nsmartesp validation succeeded.\n'

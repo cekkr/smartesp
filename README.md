@@ -104,6 +104,42 @@ idf.py build
 idf.py flash monitor
 ```
 
+## Validation Script
+
+Use the shell validation runner in [`tests/test_idf_build.sh`](/Users/riccardo/Sources/GitHub/smartesp/tests/test_idf_build.sh).
+
+Compile-only validation:
+
+```bash
+./tests/test_idf_build.sh
+```
+
+Incremental rerun without `fullclean`:
+
+```bash
+./tests/test_idf_build.sh --no-clean
+```
+
+Compile + flash + serial smoke validation:
+
+```bash
+./tests/test_idf_build.sh --flash --monitor --port /dev/cu.usbmodemXXXX
+```
+
+Default ESP-IDF path:
+
+- `/Users/riccardo/esp/esp-idf-v6.0.1`
+
+The built-in `smoke-ui` scenario validates native UI/runtime milestones through serial logs:
+
+- `boot-ui stage="display ready" progress=10`
+- `boot-ui stage="entering shell" progress=100`
+- `shell-ui rendered`
+- `demo app wasm.demo.add result=12`
+- `smartesp started`
+
+This is log-driven UI smoke validation, not touch-injection automation. If you later add hardware touch automation, extend this script rather than replacing it.
+
 ## Notes for Future Work
 
 - Add real SD-card mounting for this board rather than only consuming an already-mounted `/sdcard`.

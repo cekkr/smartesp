@@ -98,6 +98,13 @@ static esp_err_t launch_demo_app_if_enabled(void)
                                      (err == ESP_OK) ? result.last_status : err,
                                      result.has_last_result,
                                      result.last_result_i32);
+    if (err == ESP_OK && result.has_last_result) {
+        ESP_LOGI(TAG, "demo app %s result=%ld", process->app->id, (long)result.last_result_i32);
+    } else if (err == ESP_OK) {
+        ESP_LOGI(TAG, "demo app %s executed without i32 result", process->app->id);
+    } else {
+        ESP_LOGW(TAG, "demo app %s failed err=%s", process->app->id, esp_err_to_name(err));
+    }
     watch_process_manager_mark_state(process,
                                      (err == ESP_OK) ? WATCH_PROCESS_READY : WATCH_PROCESS_FAULTED,
                                      result.loaded && !result.hibernated);

@@ -10,9 +10,54 @@
 #include <unistd.h>
 
 #include "bsp/esp32_s3_touch_amoled_2_06.h"
+#include "driver/sdmmc_host.h"
 #include "esp_log.h"
+#include "esp_vfs_fat.h"
 
 static const char *TAG = "watch_storage";
+
+// The Waveshare 2.06" board wires the microSD in 1-bit SDMMC mode and has no
+// external pull-ups on CMD/D0. bsp_sdcard_mount() leaves the internal pull-ups
+// off, so the card fails to enumerate on many units. Mount here with the
+// internal pull-ups enabled, and retry at the slow probing clock if the card
+// does not come up at the default speed.
+static esp_err_t mount_sdcard(void)
+{
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.max_freq_khz = SDMMC_FREQ_DEFAULT;
+
+    sdmmc_slot_config_t slot_config = {
+        .clk = BSP_SD_CLK,
+        .cmd = BSP_SD_CMD,
+        .d0 = BSP_SD_D0,
+        .d1 = GPIO_NUM_NC,
+        .d2 = GPIO_NUM_NC,
+        .d3 = GPIO_NUM_NC,
+        .d4 = GPIO_NUM_NC,
+        .d5 = GPIO_NUM_NC,
+        .d6 = GPIO_NUM_NC,
+        .d7 = GPIO_NUM_NC,
+        .cd = SDMMC_SLOT_NO_CD,
+        .wp = SDMMC_SLOT_NO_WP,
+        .width = 1,
+        .flags = SDMMC_SLOT_FLAG_INTERNAL_PULLUP,
+    };
+
+    const esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024,
+    };
+
+    esp_err_t err = esp_vfs_fat_sdmmc_mount(BSP_SD_MOUNT_POINT, &host, &slot_config, &mount_config, &bsp_sdcard);
+    if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
+        return err;
+    }
+
+    ESP_LOGW(TAG, "SD mount at default clock failed err=%s; retrying at probing clock", esp_err_to_name(err));
+    host.max_freq_khz = SDMMC_FREQ_PROBING;
+    return esp_vfs_fat_sdmmc_mount(BSP_SD_MOUNT_POINT, &host, &slot_config, &mount_config, &bsp_sdcard);
+}
 
 static void sanitize_id(const char *input, char *output, size_t output_size)
 {
@@ -107,7 +152,7 @@ esp_err_t watch_storage_init(watch_storage_t *storage, bool prefer_sdcard_runtim
         return ESP_OK;
     }
 
-    mount_err = bsp_sdcard_mount();
+    mount_err = mount_sdcard();
     if (mount_err != ESP_OK && mount_err != ESP_ERR_INVALID_STATE) {
         ESP_LOGW(TAG,
                  "microSD mount failed err=%s; insert a card formatted as FAT32 to enable runtime spill and external WASM loading",

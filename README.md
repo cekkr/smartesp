@@ -71,14 +71,16 @@ Current runtime policy categories:
 
 ## Storage, External Apps, and Hibernation
 
-`smartesp` now mounts the microSD card through the Waveshare BSP during boot when SD-backed runtime is enabled. The current expectation is a FAT32-formatted card. Once mounted, the OS uses:
+`smartesp` mounts the microSD card during boot when SD-backed runtime is enabled. The current expectation is a FAT32-formatted card. Once mounted, the OS uses:
 
 - `/sdcard/smartesp/runtime/` for `fayasm` spill blobs
 - `/sdcard/apps/<app>/app.wasm` as the expected convention for external WASM apps
 
+The mount is performed directly in [`storage.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/storage/storage.c) rather than through `bsp_sdcard_mount()`. The 2.06" board wires the card in 1-bit SDMMC mode with no external pull-ups on CMD/D0, and the BSP helper leaves the internal pull-ups off, so the card fails to enumerate. The OS mounts with `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` enabled and retries at the slow probing clock if the default clock fails, which is required for the card to come up on this hardware.
+
 If the card is missing or cannot be mounted, the system still boots, but SD-backed hibernation stays unavailable, serial WASM install stays disabled, and disposable apps behave as cold-start workloads.
 
-The native shell now applies a dynamic horizontal inset for top text bands so text near the rounded upper border is kept inside the visible safe area instead of using a fixed left margin everywhere.
+The native shell applies a dynamic horizontal inset for each text band, scaled by how far the band reaches into the rounded top or bottom corners, so text near any curved border stays inside the visible safe area instead of using a fixed left margin everywhere. The bottom-anchored footer is inset the same way for the lower corners.
 
 ### Serial WASM Install
 

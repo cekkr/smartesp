@@ -93,11 +93,9 @@ static void ensure_shell_screen(void)
     lv_obj_set_style_text_align(s_shell_apps, LV_TEXT_ALIGN_LEFT, 0);
 
     s_shell_footer = lv_label_create(s_shell_screen);
-    lv_obj_set_width(s_shell_footer, 360);
     lv_label_set_long_mode(s_shell_footer, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_color(s_shell_footer, lv_color_hex(0x94a3b8), 0);
     lv_obj_set_style_text_font(s_shell_footer, &lv_font_montserrat_12, 0);
-    lv_obj_align(s_shell_footer, LV_ALIGN_BOTTOM_LEFT, 20, -22);
 }
 
 static void screen_size(lv_coord_t *width_out, lv_coord_t *height_out)
@@ -122,22 +120,46 @@ static void screen_size(lv_coord_t *width_out, lv_coord_t *height_out)
     }
 }
 
-static watch_ui_safe_zone_t top_safe_zone_for_band(lv_coord_t y, lv_coord_t height, lv_coord_t base_padding)
+// Horizontal distance a rounded corner of `radius` eats into the screen at a
+// point `edge_dist` pixels away from the nearest straight (top or bottom) edge.
+// Zero once we are past the curved region.
+static lv_coord_t corner_inset_for_edge_distance(lv_coord_t edge_dist, float radius)
+{
+    if (edge_dist < 0) {
+        edge_dist = 0;
+    }
+    if ((float)edge_dist >= radius) {
+        return 0;
+    }
+
+    const float offset = radius - (float)edge_dist;
+    const float curve = radius - sqrtf((radius * radius) - (offset * offset));
+    return (lv_coord_t)(curve + 0.5f);
+}
+
+// Compute the horizontal safe zone for a band spanning [y, y + height]. The
+// padding grows dynamically with how far the band reaches into the rounded top
+// or bottom corners, using the worst-case (deepest) point of the band on each
+// side so no glyph on the first or last line is clipped.
+static watch_ui_safe_zone_t safe_zone_for_band(lv_coord_t y, lv_coord_t height, lv_coord_t base_padding)
 {
     lv_coord_t width = 410;
     lv_coord_t height_px = 502;
-    lv_coord_t inset = base_padding;
     const lv_coord_t min_content_width = 180;
-    const lv_coord_t band_mid = y + (height / 2);
 
     screen_size(&width, &height_px);
 
-    if (band_mid < LV_MIN(width / 4, height_px / 5)) {
-        const float radius = (float)LV_MIN(width / 4, height_px / 5);
-        const float offset = radius - (float)band_mid;
-        const float curve = radius - sqrtf((radius * radius) - (offset * offset));
-        inset += (lv_coord_t)(curve + 0.5f);
+    if (height < 0) {
+        height = 0;
     }
+
+    const float radius = (float)LV_MIN(width / 4, height_px / 5);
+    const lv_coord_t band_top = y;
+    const lv_coord_t band_bottom = y + height;
+
+    const lv_coord_t top_inset = corner_inset_for_edge_distance(band_top, radius);
+    const lv_coord_t bottom_inset = corner_inset_for_edge_distance(height_px - band_bottom, radius);
+    lv_coord_t inset = base_padding + LV_MAX(top_inset, bottom_inset);
 
     if ((inset * 2) > (width - min_content_width)) {
         inset = (width - min_content_width) / 2;
@@ -156,7 +178,7 @@ static void place_top_label_left(lv_obj_t *obj, lv_coord_t y, lv_coord_t base_pa
 
     lv_obj_set_width(obj, LV_SIZE_CONTENT);
     lv_obj_update_layout(obj);
-    zone = top_safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
+    zone = safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
     lv_obj_set_width(obj, zone.width);
     lv_obj_set_pos(obj, zone.left, y);
     lv_obj_update_layout(obj);
@@ -168,7 +190,7 @@ static void place_top_label_centered(lv_obj_t *obj, lv_coord_t y, lv_coord_t bas
 
     lv_obj_set_width(obj, LV_SIZE_CONTENT);
     lv_obj_update_layout(obj);
-    zone = top_safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
+    zone = safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
     lv_obj_set_width(obj, zone.width);
     lv_obj_set_pos(obj, zone.left, y);
     lv_obj_update_layout(obj);
@@ -176,12 +198,42 @@ static void place_top_label_centered(lv_obj_t *obj, lv_coord_t y, lv_coord_t bas
 
 static void place_top_bar_centered(lv_obj_t *obj, lv_coord_t y, lv_coord_t width_hint, lv_coord_t base_padding)
 {
-    watch_ui_safe_zone_t zone = top_safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
+    watch_ui_safe_zone_t zone = safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
     const lv_coord_t width = LV_MIN(width_hint, zone.width);
     const lv_coord_t left = zone.left + ((zone.width - width) / 2);
 
     lv_obj_set_size(obj, width, lv_obj_get_height(obj));
     lv_obj_set_pos(obj, left, y);
+}
+
+// Anchor a wrapping label above the bottom edge, leaving `bottom_margin` of
+// clearance, and inset its sides for the rounded bottom corners. The label is
+// measured twice because wrapping to the safe width can add lines and change
+// the height that drives the final vertical position.
+static void place_bottom_label_left(lv_obj_t *obj, lv_coord_t bottom_margin, lv_coord_t base_padding)
+{
+    lv_coord_t width = 410;
+    lv_coord_t height_px = 502;
+    watch_ui_safe_zone_t zone;
+    lv_coord_t obj_height;
+    lv_coord_t y;
+
+    screen_size(&width, &height_px);
+
+    lv_obj_set_width(obj, LV_SIZE_CONTENT);
+    lv_obj_update_layout(obj);
+
+    for (int pass = 0; pass < 2; ++pass) {
+        obj_height = lv_obj_get_height(obj);
+        y = height_px - bottom_margin - obj_height;
+        zone = safe_zone_for_band(y, obj_height, base_padding);
+        lv_obj_set_width(obj, zone.width);
+        lv_obj_update_layout(obj);
+    }
+
+    obj_height = lv_obj_get_height(obj);
+    y = height_px - bottom_margin - obj_height;
+    lv_obj_set_pos(obj, zone.left, y);
 }
 
 static void layout_boot_screen(void)
@@ -211,6 +263,8 @@ static void layout_shell_screen(void)
     y += lv_obj_get_height(s_shell_memory) + 14;
 
     place_top_label_left(s_shell_apps, y, 20);
+
+    place_bottom_label_left(s_shell_footer, 22, 20);
 }
 
 esp_err_t watch_native_ui_show_boot(const char *stage, uint8_t progress)

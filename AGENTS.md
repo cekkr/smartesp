@@ -76,7 +76,7 @@ When changing policy behavior:
 
 ## Storage Rules
 
-- The watch OS mounts `/sdcard` through the Waveshare BSP when SD-backed runtime is enabled.
+- The watch OS mounts `/sdcard` directly in `storage.c` (not via `bsp_sdcard_mount()`) when SD-backed runtime is enabled, because the 2.06" board needs `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` and a probing-clock retry that the BSP helper does not enable. It still reuses the BSP pin macros (`BSP_SD_CLK/CMD/D0`) and the global `bsp_sdcard` handle.
 - Runtime spill blobs go under `/sdcard/smartesp/runtime/`.
 - External WASM apps should converge on `/sdcard/apps/<app>/app.wasm`.
 - The current safe default for cards is FAT32.

@@ -20,3 +20,4 @@ wasm_apps/build/
 #cmake-build-*
 /build-test-clock
 /managed_components
+/build-test

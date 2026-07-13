@@ -25,6 +25,7 @@ idf_component_register(
         esp_timer
         nvs_flash
         esp32_s3_touch_amoled_2_06
+        esp_lcd_touch
     PRIV_REQUIRES
         fatfs
         esp_driver_sdmmc

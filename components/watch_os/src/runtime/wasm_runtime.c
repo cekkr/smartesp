@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -112,11 +113,14 @@ static int host_add(fa_Runtime *runtime, const fa_RuntimeHostCall *call, void *u
 
 static int host_time_ms(fa_Runtime *runtime, const fa_RuntimeHostCall *call, void *user_data)
 {
+    struct timeval now;
+
     (void)runtime;
     (void)user_data;
+    gettimeofday(&now, NULL);
 
     if (!fa_RuntimeHostCall_expect(call, 0, 1) ||
-        !fa_RuntimeHostCall_set_i64(call, 0, (i64)(esp_timer_get_time() / 1000))) {
+        !fa_RuntimeHostCall_set_i64(call, 0, ((i64)now.tv_sec * 1000) + (now.tv_usec / 1000))) {
         return FA_RUNTIME_ERR_TRAP;
     }
 

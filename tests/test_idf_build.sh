@@ -45,10 +45,9 @@ Built-in scenarios:
   smoke-ui
     Requires the firmware to emit:
     - boot-ui stage="display ready" progress=10
-    - boot-ui stage="entering shell" progress=100
-    - shell-ui rendered
-    - demo app wasm.demo.add result=12
+    - boot-ui stage="launching clock" progress=100
     - clock demo wasm.demo.clock time=
+    - clock-ui rendered time=
     - smartesp started
 EOF
 }
@@ -176,10 +175,9 @@ require_cmd git
 case "$SCENARIO" in
     smoke-ui)
         append_expect_log 'boot-ui stage="display ready" progress=10'
-        append_expect_log 'boot-ui stage="entering shell" progress=100'
-        append_expect_log 'shell-ui rendered'
-        append_expect_log 'demo app wasm.demo.add result=12'
+        append_expect_log 'boot-ui stage="launching clock" progress=100'
         append_expect_log 'clock demo wasm.demo.clock time='
+        append_expect_log 'clock-ui rendered time='
         append_expect_log 'smartesp started'
         ;;
     none)

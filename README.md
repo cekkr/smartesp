@@ -16,10 +16,10 @@ This repository now contains a buildable ESP-IDF project skeleton with:
 - Waveshare BSP integration taken from the local `ESP32-S3-Touch-AMOLED-2.06` examples
 - `fayasm` added as a Git submodule under `external/fayasm`
 - an ESP-IDF component wrapper for `fayasm`
-- a native watch shell in C for boot and launcher/status surfaces
+- a native watch shell in C for boot and an edge-safe, app-quality clock surface
 - a WASM runtime layer with host bindings and SD-backed spill/load hooks
 - a process manager that marks apps as `always resident`, `resident while active`, `hibernable`, or `disposable`
-- embedded demo WASM apps proving end-to-end execution through `fayasm`, including a live clock tick compiled from C with Emscripten
+- an autostarting clock as the first user-facing WASM app, with time logic executed through `fayasm` and an elegant native LVGL presentation
 - an updated `fayasm` runtime that preserves caller operands across nested WASM calls, with 104 native tests and matching Emscripten/Rust fixture validation
 
 ## Repository Layout
@@ -81,7 +81,11 @@ The mount is performed directly in [`storage.c`](/Users/riccardo/Sources/GitHub/
 
 If the card is missing or cannot be mounted, the system still boots, but SD-backed hibernation stays unavailable, serial WASM install stays disabled, and disposable apps behave as cold-start workloads.
 
-The native shell applies a dynamic horizontal inset for each text band, scaled by how far the band reaches into the rounded top or bottom corners, so text near any curved border stays inside the visible safe area instead of using a fixed left margin everywhere. The bottom-anchored footer is inset the same way for the lower corners.
+The native UI keeps boot content and clock chrome inside the panel's rounded visible area. The active clock surface uses a fixed vertical safe region from 58 px through 442 px and centers all wide content, so neither top nor bottom glyphs enter the hidden corner arcs.
+
+The display bootstrap deliberately bypasses the BSP's `bsp_display_start_with_config()` helper while continuing to use its SH8601 panel and FT5x06 touch drivers. The helper registers this QSPI panel through LVGL's RGB-display path, which does not wait for SPI color-transfer completion and can reuse a draw buffer while it is still in flight. `watch_board.c` registers it through `lvgl_port_add_disp()` instead, rounds every invalidated area to the SH8601's required even boundaries, and keeps the AMOLED dark until LVGL has flushed the first complete frame. This prevents transient or persistent purple horizontal bands at the top of the panel.
+
+The ESP-IDF main task uses an 8 KiB stack because boot now owns the explicit panel, LVGL port, and touch initialization call chain before handing periodic work to the maintenance task.
 
 ### Serial WASM Install
 
@@ -109,7 +113,7 @@ The built-in `wasm.demo.add` application embeds a tiny WASM module that imports 
 - executing an exported function through `fayasm`
 - capturing the last result for the native shell
 
-The built-in `wasm.demo.clock` application is authored in C at [`wasm_apps/clock_demo/clock_demo.c`](/Users/riccardo/Sources/GitHub/smartesp/wasm_apps/clock_demo/clock_demo.c), compiled to WASM with Emscripten, and embedded via [`components/watch_os/src/apps/clock_demo_wasm.h`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/clock_demo_wasm.h). It imports `env.host_time_ms`, converts uptime to `HHMMSS`, updates the native shell once per second, and is built with a constrained initial memory/stack so it fits the ESP32-S3 runtime budget.
+The built-in `wasm.demo.clock` application is the first user-facing application started at boot. It is authored in C at [`wasm_apps/clock_demo/clock_demo.c`](/Users/riccardo/Sources/GitHub/smartesp/wasm_apps/clock_demo/clock_demo.c), compiled to WASM with Emscripten, and embedded via [`components/watch_os/src/apps/clock_demo_wasm.h`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/apps/clock_demo_wasm.h). It imports the wall-clock `env.host_time_ms`, converts it to `HHMMSS`, and returns that value through `fayasm` once per second. Native C remains responsible only for presenting the result as a designed watch face with a large `HH:MM`, accent seconds, date, and WASM runtime status. If no valid wall clock has been restored when firmware starts, the OS seeds it from the firmware build timestamp; a future network or RTC service can replace that fallback without changing the app ABI.
 
 If you change the clock demo source, regenerate the embedded header before building firmware:
 
@@ -183,10 +187,9 @@ Default ESP-IDF path:
 The built-in `smoke-ui` scenario validates native UI/runtime milestones through serial logs. In non-interactive environments, the script falls back to a direct raw serial capture instead of `idf_monitor`.
 
 - `boot-ui stage="display ready" progress=10`
-- `boot-ui stage="entering shell" progress=100`
-- `shell-ui rendered`
-- `demo app wasm.demo.add result=12`
+- `boot-ui stage="launching clock" progress=100`
 - `clock demo wasm.demo.clock time=`
+- `clock-ui rendered time=`
 - `smartesp started`
 
 This is log-driven UI smoke validation, not touch-injection automation. If you later add hardware touch automation, extend this script rather than replacing it.

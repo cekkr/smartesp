@@ -59,6 +59,14 @@ There are two deliberate paths:
 
 Keep that separation visible in code and documentation.
 
+## Display Rules
+
+- Keep the SH8601 registered with `lvgl_port_add_disp()` as a QSPI/SPI display. Do not switch back to the Waveshare BSP's RGB registration path: it can release LVGL draw buffers before SPI color transfers complete and produce corrupted horizontal bands.
+- Keep SH8601 invalidation coordinates rounded to even starts and even exclusive ends.
+- Keep the AMOLED dark until the first full LVGL frame has been synchronously presented.
+- Keep `CONFIG_ESP_MAIN_TASK_STACK_SIZE` at least 8192 bytes while display and touch initialization run synchronously from `app_main`; the ESP-IDF default overflows during this boot path.
+- Place user-facing content inside the rounded panel's vertical safe region (currently y=58 through y=442) and dynamically inset any text bands that approach the curved corners.
+
 ## Residency Policy
 
 Current policy classes live in [`components/watch_os/include/watch_os_app.h`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/include/watch_os_app.h):

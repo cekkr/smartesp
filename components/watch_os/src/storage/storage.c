@@ -44,7 +44,10 @@ static esp_err_t mount_sdcard(void)
     };
 
     const esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
+        // ESP-IDF only reformats after the card has initialized and FatFs
+        // reports FR_NO_FILESYSTEM or FR_INT_ERR. Transport/enumeration errors
+        // therefore still fail without touching the card.
+        .format_if_mount_failed = true,
         .max_files = 5,
         .allocation_unit_size = 16 * 1024,
     };
@@ -155,7 +158,7 @@ esp_err_t watch_storage_init(watch_storage_t *storage, bool prefer_sdcard_runtim
     mount_err = mount_sdcard();
     if (mount_err != ESP_OK && mount_err != ESP_ERR_INVALID_STATE) {
         ESP_LOGW(TAG,
-                 "microSD mount failed err=%s; insert a card formatted as FAT32 to enable runtime spill and external WASM loading",
+                 "microSD mount/repair failed err=%s; check card seating and SDMMC connectivity",
                  esp_err_to_name(mount_err));
         return ESP_OK;
     }

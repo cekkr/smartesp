@@ -19,6 +19,7 @@ This file is the fast path for future agents working on `smartesp`. Keep it curr
 - Main build command: `idf.py build`
 - Flash/monitor: `idf.py flash monitor`
 - Primary validation script: `./tests/test_idf_build.sh`
+- After changing `external/fayasm`, run its native suite from the submodule with `./build.sh`; validate generated fixtures with both Emscripten and the Rust fallback when fixture/toolchain behavior changes.
 - Regenerate the built-in clock WASM after editing it: `./scripts/build_clock_demo_wasm.sh`
 - Default local ESP-IDF path on this machine: `/Users/riccardo/esp/esp-idf-v6.0.1`
 - Use `./tests/test_idf_build.sh --no-clean` for incremental reruns when the target is unchanged.
@@ -79,7 +80,7 @@ When changing policy behavior:
 - The watch OS mounts `/sdcard` directly in `storage.c` (not via `bsp_sdcard_mount()`) when SD-backed runtime is enabled, because the 2.06" board needs `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` and a probing-clock retry that the BSP helper does not enable. It still reuses the BSP pin macros (`BSP_SD_CLK/CMD/D0`) and the global `bsp_sdcard` handle.
 - Runtime spill blobs go under `/sdcard/smartesp/runtime/`.
 - External WASM apps should converge on `/sdcard/apps/<app>/app.wasm`.
-- The current safe default for cards is FAT32.
+- FAT-formatted cards are the safe default. When a card initializes but FatFs reports no usable filesystem or an inconsistent filesystem, boot-time mounting automatically repartitions and formats it as FAT; this is destructive to the card's existing contents. Transport/enumeration failures never trigger formatting.
 - During early development, external WASM payloads are transferred over USB serial with `./scripts/push_wasm_serial.py`, which speaks the device-side `WASM-UPLOAD` stdio protocol.
 - Built-in Emscripten-generated WASM headers should be regenerated from `wasm_apps/` sources before firmware builds when those sources change.
 - If you add manifests, document the schema in `README.md` and link it here.

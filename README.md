@@ -20,6 +20,7 @@ This repository now contains a buildable ESP-IDF project skeleton with:
 - a WASM runtime layer with host bindings and SD-backed spill/load hooks
 - a process manager that marks apps as `always resident`, `resident while active`, `hibernable`, or `disposable`
 - embedded demo WASM apps proving end-to-end execution through `fayasm`, including a live clock tick compiled from C with Emscripten
+- an updated `fayasm` runtime that preserves caller operands across nested WASM calls, with 104 native tests and matching Emscripten/Rust fixture validation
 
 ## Repository Layout
 
@@ -71,12 +72,12 @@ Current runtime policy categories:
 
 ## Storage, External Apps, and Hibernation
 
-`smartesp` mounts the microSD card during boot when SD-backed runtime is enabled. The current expectation is a FAT32-formatted card. Once mounted, the OS uses:
+`smartesp` mounts the microSD card during boot when SD-backed runtime is enabled. FAT-formatted cards mount normally. If the card initializes but FatFs reports that it has no usable filesystem or that the filesystem is internally inconsistent, the device automatically repartitions and formats it as FAT before retrying the mount. This recovery is destructive to existing card contents; SDMMC transport/enumeration failures do not trigger formatting. Once mounted, the OS uses:
 
 - `/sdcard/smartesp/runtime/` for `fayasm` spill blobs
 - `/sdcard/apps/<app>/app.wasm` as the expected convention for external WASM apps
 
-The mount is performed directly in [`storage.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/storage/storage.c) rather than through `bsp_sdcard_mount()`. The 2.06" board wires the card in 1-bit SDMMC mode with no external pull-ups on CMD/D0, and the BSP helper leaves the internal pull-ups off, so the card fails to enumerate. The OS mounts with `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` enabled and retries at the slow probing clock if the default clock fails, which is required for the card to come up on this hardware.
+The mount is performed directly in [`storage.c`](/Users/riccardo/Sources/GitHub/smartesp/components/watch_os/src/storage/storage.c) rather than through `bsp_sdcard_mount()`. The 2.06" board wires the card in 1-bit SDMMC mode with no external pull-ups on CMD/D0, and the BSP helper leaves the internal pull-ups off, so the card fails to enumerate. The OS mounts with `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` enabled, asks ESP-IDF to format only recoverable FatFs mount failures, and retries at the slow probing clock if the default clock fails.
 
 If the card is missing or cannot be mounted, the system still boots, but SD-backed hibernation stays unavailable, serial WASM install stays disabled, and disposable apps behave as cold-start workloads.
 
@@ -137,6 +138,15 @@ idf.py build
 ```bash
 idf.py flash monitor
 ```
+
+When changing the runtime submodule, also run its native fixture/test matrix:
+
+```bash
+cd external/fayasm
+./build.sh
+```
+
+The current suite contains 104 tests. Its `integer_ops` real-toolchain fixture covers signed division/remainder, i32/i64 rotate and bit-count operations, typed i64 calls, and nested-call operand preservation under both Emscripten and the Rust fallback.
 
 ## Validation Script
 

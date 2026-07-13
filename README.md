@@ -20,7 +20,7 @@ This repository now contains a buildable ESP-IDF project skeleton with:
 - a WASM runtime layer with host bindings and SD-backed spill/load hooks
 - a process manager that marks apps as `always resident`, `resident while active`, `hibernable`, or `disposable`
 - an autostarting clock as the first user-facing WASM app, with time logic executed through `fayasm` and an elegant native LVGL presentation
-- an updated `fayasm` runtime that preserves caller operands across nested WASM calls, with 104 native tests and matching Emscripten/Rust fixture validation
+- an updated `fayasm` runtime that preserves caller operands across nested WASM calls and avoids repeated JIT preparation for large function bodies, with 113 native tests and matching Emscripten/Rust fixture validation
 
 ## Repository Layout
 
@@ -150,7 +150,7 @@ cd external/fayasm
 ./build.sh
 ```
 
-The current suite contains 104 tests. Its `integer_ops` real-toolchain fixture covers signed division/remainder, i32/i64 rotate and bit-count operations, typed i64 calls, and nested-call operand preservation under both Emscripten and the Rust fallback.
+The current suite contains 113 tests. Its `integer_ops` real-toolchain fixture covers signed division/remainder, i32/i64 rotate and bit-count operations, typed i64 calls, and nested-call operand preservation under both Emscripten and the Rust fallback. The upstream `stats_suite` fixtures also cover statistical and algorithmic workloads and guard against repeated JIT preparation for bodies larger than the per-chunk operation budget.
 
 ## Validation Script
 

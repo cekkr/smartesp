@@ -19,7 +19,7 @@ This file is the fast path for future agents working on `smartesp`. Keep it curr
 - Main build command: `idf.py build`
 - Flash/monitor: `idf.py flash monitor`
 - Primary validation script: `./tests/test_idf_build.sh`
-- After changing `external/fayasm`, run its native suite from the submodule with `./build.sh`; validate generated fixtures with both Emscripten and the Rust fallback when fixture/toolchain behavior changes.
+- After changing `external/fayasm`, run its native suite from the submodule with `./build.sh` (currently 113 tests); validate generated fixtures with both Emscripten and the Rust fallback when fixture/toolchain behavior changes.
 - Regenerate the built-in clock WASM after editing it: `./scripts/build_clock_demo_wasm.sh`
 - Default local ESP-IDF path on this machine: `/Users/riccardo/esp/esp-idf-v6.0.1`
 - Use `./tests/test_idf_build.sh --no-clean` for incremental reruns when the target is unchanged.

@@ -4,11 +4,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "board/watch_board.h"
+#include "board/smart_os_board.h"
 #include "esp_log.h"
 #include "lvgl.h"
 
-static const char *TAG = "watch_ui";
+static const char *TAG = "smart_os_ui";
 
 static lv_obj_t *s_boot_screen;
 static lv_obj_t *s_boot_title;
@@ -31,13 +31,13 @@ static lv_obj_t *s_clock_brand;
 static void open_apps(lv_event_t *event)
 {
     (void)event;
-    watch_native_ui_request(WATCH_UI_ACTION_BUTTON);
+    smart_os_native_ui_request(SMART_OS_UI_ACTION_BUTTON);
 }
 
 typedef struct {
     lv_coord_t left;
     lv_coord_t width;
-} watch_ui_safe_zone_t;
+} smart_os_ui_safe_zone_t;
 
 static void style_screen(lv_obj_t *screen)
 {
@@ -56,7 +56,7 @@ static void ensure_boot_screen(void)
     style_screen(s_boot_screen);
 
     s_boot_title = lv_label_create(s_boot_screen);
-    lv_label_set_text(s_boot_title, "smartesp");
+    lv_label_set_text(s_boot_title, "SmartOS");
     lv_obj_set_style_text_font(s_boot_title, &lv_font_montserrat_32, 0);
     lv_obj_set_style_text_color(s_boot_title, lv_color_hex(0x68f0d5), 0);
     lv_obj_set_style_text_align(s_boot_title, LV_TEXT_ALIGN_CENTER, 0);
@@ -159,14 +159,14 @@ static void ensure_clock_screen(void)
     lv_obj_set_pos(s_clock_app_caption, 22, 40);
 
     s_clock_brand = lv_label_create(s_clock_screen);
-    lv_label_set_text(s_clock_brand, "smartesp");
+    lv_label_set_text(s_clock_brand, "SmartOS");
     lv_obj_set_style_text_font(s_clock_brand, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(s_clock_brand, lv_color_hex(0x536270), 0);
 }
 
 static void screen_size(lv_coord_t *width_out, lv_coord_t *height_out)
 {
-    lv_display_t *display = watch_board_display();
+    lv_display_t *display = smart_os_board_display();
 
     if (display == NULL) {
         if (width_out != NULL) {
@@ -207,7 +207,7 @@ static lv_coord_t corner_inset_for_edge_distance(lv_coord_t edge_dist, float rad
 // padding grows dynamically with how far the band reaches into the rounded top
 // or bottom corners, using the worst-case (deepest) point of the band on each
 // side so no glyph on the first or last line is clipped.
-static watch_ui_safe_zone_t safe_zone_for_band(lv_coord_t y, lv_coord_t height, lv_coord_t base_padding)
+static smart_os_ui_safe_zone_t safe_zone_for_band(lv_coord_t y, lv_coord_t height, lv_coord_t base_padding)
 {
     lv_coord_t width = 410;
     lv_coord_t height_px = 502;
@@ -231,7 +231,7 @@ static watch_ui_safe_zone_t safe_zone_for_band(lv_coord_t y, lv_coord_t height, 
         inset = (width - min_content_width) / 2;
     }
 
-    watch_ui_safe_zone_t zone = {
+    smart_os_ui_safe_zone_t zone = {
         .left = inset,
         .width = width - (inset * 2),
     };
@@ -240,7 +240,7 @@ static watch_ui_safe_zone_t safe_zone_for_band(lv_coord_t y, lv_coord_t height, 
 
 static void place_top_label_centered(lv_obj_t *obj, lv_coord_t y, lv_coord_t base_padding)
 {
-    watch_ui_safe_zone_t zone;
+    smart_os_ui_safe_zone_t zone;
 
     lv_obj_set_width(obj, LV_SIZE_CONTENT);
     lv_obj_update_layout(obj);
@@ -252,7 +252,7 @@ static void place_top_label_centered(lv_obj_t *obj, lv_coord_t y, lv_coord_t bas
 
 static void place_top_bar_centered(lv_obj_t *obj, lv_coord_t y, lv_coord_t width_hint, lv_coord_t base_padding)
 {
-    watch_ui_safe_zone_t zone = safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
+    smart_os_ui_safe_zone_t zone = safe_zone_for_band(y, lv_obj_get_height(obj), base_padding);
     const lv_coord_t width = LV_MIN(width_hint, zone.width);
     const lv_coord_t left = zone.left + ((zone.width - width) / 2);
 
@@ -283,9 +283,9 @@ static void layout_clock_screen(void)
     lv_obj_align(s_clock_brand, LV_ALIGN_TOP_MID, 0, 430);
 }
 
-esp_err_t watch_native_ui_show_boot(const char *stage, uint8_t progress)
+esp_err_t smart_os_native_ui_show_boot(const char *stage, uint8_t progress)
 {
-    if (!watch_board_lock(200)) {
+    if (!smart_os_board_lock(200)) {
         ESP_LOGW(TAG, "display lock timeout during boot UI");
         return ESP_ERR_TIMEOUT;
     }
@@ -296,24 +296,24 @@ esp_err_t watch_native_ui_show_boot(const char *stage, uint8_t progress)
     layout_boot_screen();
     lv_screen_load(s_boot_screen);
     lv_obj_invalidate(s_boot_screen);
-    const esp_err_t present_err = watch_board_present_first_frame();
+    const esp_err_t present_err = smart_os_board_present_first_frame();
     if (present_err != ESP_OK) {
-        watch_board_unlock();
+        smart_os_board_unlock();
         return present_err;
     }
     ESP_LOGI(TAG, "boot-ui stage=\"%s\" progress=%u", (stage != NULL) ? stage : "booting", (unsigned)progress);
 
-    watch_board_unlock();
+    smart_os_board_unlock();
     return ESP_OK;
 }
 
-esp_err_t watch_native_ui_show_clock(const watch_ui_clock_model_t *model)
+esp_err_t smart_os_native_ui_show_clock(const smart_os_ui_clock_model_t *model)
 {
     if (model == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!watch_board_lock(200)) {
+    if (!smart_os_board_lock(200)) {
         ESP_LOGW(TAG, "display lock timeout during clock UI");
         return ESP_ERR_TIMEOUT;
     }
@@ -328,6 +328,6 @@ esp_err_t watch_native_ui_show_clock(const watch_ui_clock_model_t *model)
     }
     ESP_LOGI(TAG, "clock-ui rendered time=%s:%s", model->hour_minute, model->seconds);
 
-    watch_board_unlock();
+    smart_os_board_unlock();
     return ESP_OK;
 }

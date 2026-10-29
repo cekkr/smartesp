@@ -1,4 +1,4 @@
-#include "watch_board.h"
+#include "smart_os_board.h"
 
 #include "bsp/display.h"
 #include "bsp/esp-bsp.h"
@@ -8,9 +8,9 @@
 #include "esp_lvgl_port.h"
 #include "esp_timer.h"
 
-#define WATCH_DRAW_BUFFER_LINES 40
+#define SMART_OS_DRAW_BUFFER_LINES 40
 
-#define WATCH_LVGL_PORT_INIT_CONFIG()   \
+#define SMART_OS_LVGL_PORT_INIT_CONFIG()   \
     {                                   \
         .task_priority = 4,             \
         .task_stack = 10 * 1024,        \
@@ -19,7 +19,7 @@
         .timer_period_ms = 5,           \
     }
 
-static const char *TAG = "watch_board";
+static const char *TAG = "smart_os_board";
 static lv_display_t *s_display;
 static lv_indev_t *s_touch_input;
 static bool s_first_frame_presented;
@@ -78,7 +78,7 @@ static void init_buttons(void)
              s_power_button ? "EXIO6" : (s_pmic ? "AXP2101" : "unavailable"));
 }
 
-bool watch_board_poll_button(void)
+bool smart_os_board_poll_button(void)
 {
     bool pmic_click = false;
     if (s_pmic != NULL) {
@@ -117,16 +117,16 @@ bool watch_board_poll_button(void)
     return pmic_click;
 }
 
-esp_err_t watch_board_set_brightness(uint8_t percent)
+esp_err_t smart_os_board_set_brightness(uint8_t percent)
 {
     if (percent < 20 || percent > 100) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (!watch_board_lock(200)) {
+    if (!smart_os_board_lock(200)) {
         return ESP_ERR_TIMEOUT;
     }
     esp_err_t err = bsp_display_brightness_set(percent);
-    watch_board_unlock();
+    smart_os_board_unlock();
     return err;
 }
 
@@ -138,7 +138,7 @@ static void round_sh8601_area(lv_area_t *area)
     area->y2 |= 1;
 }
 
-esp_err_t watch_board_init(void)
+esp_err_t smart_os_board_init(void)
 {
     if (s_display != NULL) {
         return ESP_OK;
@@ -150,7 +150,7 @@ esp_err_t watch_board_init(void)
     const bsp_display_config_t panel_cfg = {
         .max_transfer_sz = BSP_LCD_H_RES * BSP_LCD_V_RES * BSP_LCD_BITS_PER_PIXEL / 8,
     };
-    const lvgl_port_cfg_t port_cfg = WATCH_LVGL_PORT_INIT_CONFIG();
+    const lvgl_port_cfg_t port_cfg = SMART_OS_LVGL_PORT_INIT_CONFIG();
 
     ESP_RETURN_ON_ERROR(bsp_display_new(&panel_cfg, &panel, &io), TAG, "panel start failed");
     ESP_RETURN_ON_ERROR(bsp_display_backlight_off(), TAG, "panel blanking failed");
@@ -159,7 +159,7 @@ esp_err_t watch_board_init(void)
     const lvgl_port_display_cfg_t display_cfg = {
         .io_handle = io,
         .panel_handle = panel,
-        .buffer_size = BSP_LCD_H_RES * WATCH_DRAW_BUFFER_LINES,
+        .buffer_size = BSP_LCD_H_RES * SMART_OS_DRAW_BUFFER_LINES,
         .double_buffer = false,
         .hres = BSP_LCD_H_RES,
         .vres = BSP_LCD_V_RES,
@@ -196,22 +196,22 @@ esp_err_t watch_board_init(void)
     return ESP_OK;
 }
 
-bool watch_board_lock(uint32_t timeout_ms)
+bool smart_os_board_lock(uint32_t timeout_ms)
 {
     return lvgl_port_lock(timeout_ms);
 }
 
-void watch_board_unlock(void)
+void smart_os_board_unlock(void)
 {
     lvgl_port_unlock();
 }
 
-lv_display_t *watch_board_display(void)
+lv_display_t *smart_os_board_display(void)
 {
     return s_display;
 }
 
-esp_err_t watch_board_present_first_frame(void)
+esp_err_t smart_os_board_present_first_frame(void)
 {
     if ((s_display == NULL) || s_first_frame_presented) {
         return ESP_OK;

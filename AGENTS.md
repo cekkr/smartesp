@@ -2,6 +2,8 @@
 
 This file is the fast path for future agents working on `smartesp`. Keep it current. If you change behavior, structure, build steps, or workflow rules, update this file and `README.md` in the same turn.
 
+The OS is **SmartOS**. Its ESP-IDF project/component and source directory use `smart_os`; OS APIs/types use `smart_os_*` and constants use `SMART_OS_*`. The entry point is `smart_os_start()` in `smart_os.h`. Keep the Watch app name, installed app IDs/paths, `watch_settings` NVS namespace, `/sdcard/smartesp/runtime/` storage, and `WATCH-UI` wire protocol stable for compatibility.
+
 ## Non-Negotiable Directives
 
 - Update `README.md` every time the architecture, workflow, build steps, or runtime behavior changes.
@@ -38,17 +40,17 @@ Start from these files:
 - [`assets/`](/Users/richard/Sources/GitHub/smartesp/assets): device-captured Watch, Apps, and Settings PNG screenshots embedded in `README.md`. Refresh these from the hardware smoke test captures when the visible UI changes.
 
 - [`main/main.c`](/Users/richard/Sources/GitHub/smartesp/main/main.c): app entrypoint.
-- [`components/watch_os/src/watch_os.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/watch_os.c): boot sequence, orchestration, periodic supervision.
-- [`components/watch_os/src/board/watch_board.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/board/watch_board.c): display/LVGL/BSP bootstrap.
-- [`components/watch_os/src/ui/app_menu.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/ui/app_menu.c): circular Watch/Settings launcher, brightness/error screens, serial pointer/snapshot diagnostics.
-- [`components/watch_os/src/ui/native_ui.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/ui/native_ui.c): native boot and shell UI in C.
-- [`components/watch_os/src/kernel/process_manager.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/kernel/process_manager.c): app slots and residency policy.
-- [`components/watch_os/src/runtime/wasm_runtime.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/runtime/wasm_runtime.c): `fayasm` execution, host bindings, spill/load hooks.
-- [`components/watch_os/src/storage/storage.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/storage/storage.c): runtime blob paths and file helpers.
-- [`components/watch_os/src/io/serial_uploader.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/io/serial_uploader.c): USB/UART stdio protocol that installs external `app.wasm` payloads onto the SD card.
-- [`components/watch_os/src/apps/app_catalog.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/apps/app_catalog.c): built-in app registry.
-- [`components/watch_os/src/apps/clock_demo_wasm.h`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/apps/clock_demo_wasm.h): generated Emscripten-built clock demo bytes embedded into firmware.
-- [`components/watch_os/src/apps/sample_add_wasm.h`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/apps/sample_add_wasm.h): embedded demo WASM bytes.
+- [`components/smart_os/src/smart_os.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/smart_os.c): boot sequence, orchestration, periodic supervision.
+- [`components/smart_os/src/board/smart_os_board.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/board/smart_os_board.c): display/LVGL/BSP bootstrap.
+- [`components/smart_os/src/ui/app_menu.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/ui/app_menu.c): circular Watch/Settings launcher, brightness/error screens, serial pointer/snapshot diagnostics.
+- [`components/smart_os/src/ui/native_ui.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/ui/native_ui.c): native boot and shell UI in C.
+- [`components/smart_os/src/kernel/process_manager.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/kernel/process_manager.c): app slots and residency policy.
+- [`components/smart_os/src/runtime/wasm_runtime.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/runtime/wasm_runtime.c): `fayasm` execution, host bindings, spill/load hooks.
+- [`components/smart_os/src/storage/storage.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/storage/storage.c): runtime blob paths and file helpers.
+- [`components/smart_os/src/io/serial_uploader.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/io/serial_uploader.c): USB/UART stdio protocol that installs external `app.wasm` payloads onto the SD card.
+- [`components/smart_os/src/apps/app_catalog.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/apps/app_catalog.c): built-in app registry.
+- [`components/smart_os/src/apps/clock_demo_wasm.h`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/apps/clock_demo_wasm.h): generated Emscripten-built clock demo bytes embedded into firmware.
+- [`components/smart_os/src/apps/sample_add_wasm.h`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/apps/sample_add_wasm.h): embedded demo WASM bytes.
 - [`components/fayasm_port/CMakeLists.txt`](/Users/richard/Sources/GitHub/smartesp/components/fayasm_port/CMakeLists.txt): ESP-IDF wrapper over upstream `fayasm`.
 - [`wasm_apps/settings/settings.c`](/Users/richard/Sources/GitHub/smartesp/wasm_apps/settings/settings.c): SD-loaded Settings brightness policy, using `host_app_action` and `host_app_value`.
 - [`scripts/build_wasm_apps.sh`](/Users/richard/Sources/GitHub/smartesp/scripts/build_wasm_apps.sh): Emscripten app build and Watch recovery header generation.
@@ -91,12 +93,12 @@ Keep that separation visible in code and documentation.
 
 ## Residency Policy
 
-Current policy classes live in [`components/watch_os/include/watch_os_app.h`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/include/watch_os_app.h):
+Current policy classes live in [`components/smart_os/include/smart_os_app.h`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/include/smart_os_app.h):
 
-- `WATCH_APP_RESIDENCY_ALWAYS_RESIDENT`
-- `WATCH_APP_RESIDENCY_RESIDENT_WHILE_ACTIVE`
-- `WATCH_APP_RESIDENCY_HIBERNABLE`
-- `WATCH_APP_RESIDENCY_DISPOSABLE`
+- `SMART_OS_APP_RESIDENCY_ALWAYS_RESIDENT`
+- `SMART_OS_APP_RESIDENCY_RESIDENT_WHILE_ACTIVE`
+- `SMART_OS_APP_RESIDENCY_HIBERNABLE`
+- `SMART_OS_APP_RESIDENCY_DISPOSABLE`
 
 Foreground processes are excluded from memory-pressure victims. Background Watch is hibernable and pauses ticking; Settings is explicitly unloaded on exit as disposable.
 
@@ -109,7 +111,7 @@ When changing policy behavior:
 
 ## Storage Rules
 
-- The watch OS mounts `/sdcard` directly in `storage.c` (not via `bsp_sdcard_mount()`) when SD-backed runtime is enabled, because the 2.06" board needs `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` and a probing-clock retry that the BSP helper does not enable. It still reuses the BSP pin macros (`BSP_SD_CLK/CMD/D0`) and the global `bsp_sdcard` handle.
+- SmartOS mounts `/sdcard` directly in `storage.c` (not via `bsp_sdcard_mount()`) when SD-backed runtime is enabled, because the 2.06" board needs `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` and a probing-clock retry that the BSP helper does not enable. It still reuses the BSP pin macros (`BSP_SD_CLK/CMD/D0`) and the global `bsp_sdcard` handle.
 - Runtime spill blobs go under `/sdcard/smartesp/runtime/`.
 - External WASM apps should converge on `/sdcard/apps/<app>/app.wasm`.
 - FAT-formatted cards are the safe default. When a card initializes but FatFs reports no usable filesystem or an inconsistent filesystem, boot-time mounting automatically repartitions and formats it as FAT; this is destructive to the card's existing contents. Transport/enumeration failures never trigger formatting.

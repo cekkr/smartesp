@@ -1,6 +1,8 @@
-# smartesp
+# SmartOS
 
-`smartesp` is an ESP-IDF smartwatch OS scaffold for the Waveshare ESP32-S3 Touch AMOLED 2.06 board. It keeps the watch shell, boot flows, and sensitive shared UI native in C, while executing selected applications through [`fayasm`](https://github.com/Geckos-Ink/fayasm) as WebAssembly workloads.
+SmartOS (`smart_os`) is an ESP-IDF smartwatch OS scaffold for the Waveshare ESP32-S3 Touch AMOLED 2.06 board, developed in the `smartesp` repository. It keeps the watch shell, boot flows, and sensitive shared UI native in C, while executing selected applications through [`fayasm`](https://github.com/Geckos-Ink/fayasm) as WebAssembly workloads.
+
+The ESP-IDF project and OS component are named `smart_os`. Include `smart_os.h` and start the OS with `smart_os_start()` and `SMART_OS_DEFAULT_CONFIG()`; OS types/functions use `smart_os_*` and constants use `SMART_OS_*`. Firmware artifacts are `smart_os.bin` and `smart_os.elf`. Boot and Watch branding display **SmartOS**. The Watch app retains its name, app IDs and SD paths stay stable, and existing `watch_settings` NVS preferences, `/sdcard/smartesp/runtime/` spill storage, and `WATCH-UI` serial diagnostics remain compatible.
 
 The target shape is a watch-class system closer to an Apple Watch than a generic LVGL demo:
 
@@ -11,7 +13,7 @@ The target shape is a watch-class system closer to an Apple Watch than a generic
 
 ## Screenshots
 
-Captured from LVGL on the connected ESP32-S3 watch during the hardware smoke test.
+Captured from LVGL on the connected ESP32-S3 watch during the hardware smoke test. These captures predate the SmartOS branding change; the Watch footer now displays SmartOS.
 
 | Watch | Apps | Settings |
 | --- | --- | --- |
@@ -38,14 +40,14 @@ Use this map first when navigating the code:
 - [`assets/`](assets/) contains device-captured PNG screenshots used above.
 
 - [`main/main.c`](/Users/richard/Sources/GitHub/smartesp/main/main.c) starts NVS and launches the OS.
-- [`components/watch_os/src/watch_os.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/watch_os.c) is the top-level orchestrator.
-- [`components/watch_os/src/board/`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/board) contains board/display bootstrap helpers.
-- [`components/watch_os/src/ui/`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/ui) contains the native C watch shell and boot/loading UI.
-- [`components/watch_os/src/kernel/`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/kernel) contains the process catalog and residency policy logic.
-- [`components/watch_os/src/runtime/`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/runtime) contains the `fayasm` integration and host bindings.
-- [`components/watch_os/src/storage/`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/storage) contains SD/runtime blob helpers used for hibernation.
-- [`components/watch_os/src/io/`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/io) contains serial-side helpers, including the USB/UART WASM uploader that writes app payloads onto the SD card.
-- [`components/watch_os/src/apps/`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/apps) defines built-in app descriptors and the embedded demo WASM headers.
+- [`components/smart_os/src/smart_os.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/smart_os.c) is the top-level orchestrator.
+- [`components/smart_os/src/board/`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/board) contains board/display bootstrap helpers.
+- [`components/smart_os/src/ui/`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/ui) contains the native C watch shell and boot/loading UI.
+- [`components/smart_os/src/kernel/`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/kernel) contains the process catalog and residency policy logic.
+- [`components/smart_os/src/runtime/`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/runtime) contains the `fayasm` integration and host bindings.
+- [`components/smart_os/src/storage/`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/storage) contains SD/runtime blob helpers used for hibernation.
+- [`components/smart_os/src/io/`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/io) contains serial-side helpers, including the USB/UART WASM uploader that writes app payloads onto the SD card.
+- [`components/smart_os/src/apps/`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/apps) defines built-in app descriptors and the embedded demo WASM headers.
 - [`components/fayasm_port/`](/Users/richard/Sources/GitHub/smartesp/components/fayasm_port) wraps upstream `fayasm` sources as an ESP-IDF component.
 - [`wasm_apps/`](/Users/richard/Sources/GitHub/smartesp/wasm_apps) holds C sources compiled into SD-installable WASM apps; Watch also has an embedded recovery copy.
 - [`scripts/build_clock_demo_wasm.sh`](/Users/richard/Sources/GitHub/smartesp/scripts/build_clock_demo_wasm.sh) is a compatibility entry point for `scripts/build_wasm_apps.sh`, which builds both apps and refreshes the embedded Watch recovery header.
@@ -76,19 +78,19 @@ Use WASM for:
 
 Current runtime policy categories:
 
-- `WATCH_APP_RESIDENCY_ALWAYS_RESIDENT`: never swap out
-- `WATCH_APP_RESIDENCY_RESIDENT_WHILE_ACTIVE`: keep warm while in active use
-- `WATCH_APP_RESIDENCY_HIBERNABLE`: spill JIT/memory state to SD when needed
-- `WATCH_APP_RESIDENCY_DISPOSABLE`: unload and recreate on demand
+- `SMART_OS_APP_RESIDENCY_ALWAYS_RESIDENT`: never swap out
+- `SMART_OS_APP_RESIDENCY_RESIDENT_WHILE_ACTIVE`: keep warm while in active use
+- `SMART_OS_APP_RESIDENCY_HIBERNABLE`: spill JIT/memory state to SD when needed
+- `SMART_OS_APP_RESIDENCY_DISPOSABLE`: unload and recreate on demand
 
 ## Storage, External Apps, and Hibernation
 
-`smartesp` mounts the microSD card during boot when SD-backed runtime is enabled. FAT-formatted cards mount normally. If the card initializes but FatFs reports that it has no usable filesystem or that the filesystem is internally inconsistent, the device automatically repartitions and formats it as FAT before retrying the mount. This recovery is destructive to existing card contents; SDMMC transport/enumeration failures do not trigger formatting. Once mounted, the OS uses:
+SmartOS mounts the microSD card during boot when SD-backed runtime is enabled. FAT-formatted cards mount normally. If the card initializes but FatFs reports that it has no usable filesystem or that the filesystem is internally inconsistent, the device automatically repartitions and formats it as FAT before retrying the mount. This recovery is destructive to existing card contents; SDMMC transport/enumeration failures do not trigger formatting. Once mounted, the OS uses:
 
 - `/sdcard/smartesp/runtime/` for `fayasm` spill blobs
 - `/sdcard/apps/<app>/app.wasm` as the expected convention for external WASM apps
 
-The mount is performed directly in [`storage.c`](/Users/richard/Sources/GitHub/smartesp/components/watch_os/src/storage/storage.c) rather than through `bsp_sdcard_mount()`. The 2.06" board wires the card in 1-bit SDMMC mode with no external pull-ups on CMD/D0, and the BSP helper leaves the internal pull-ups off, so the card fails to enumerate. The OS mounts with `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` enabled, asks ESP-IDF to format only recoverable FatFs mount failures, and retries at the slow probing clock if the default clock fails.
+The mount is performed directly in [`storage.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/storage/storage.c) rather than through `bsp_sdcard_mount()`. The 2.06" board wires the card in 1-bit SDMMC mode with no external pull-ups on CMD/D0, and the BSP helper leaves the internal pull-ups off, so the card fails to enumerate. The OS mounts with `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` enabled, asks ESP-IDF to format only recoverable FatFs mount failures, and retries at the slow probing clock if the default clock fails.
 
 If the card is missing or cannot be mounted, the system still boots with the embedded Watch recovery copy. SD-backed hibernation and WASM installation stay unavailable, Settings shows an installation error, and serial UI diagnostics remain available.
 
@@ -104,7 +106,7 @@ Settings offers brightness controls in 20% steps, bounded to 20–100%. Its WASM
 
 The native UI keeps boot content and clock chrome inside the panel's rounded visible area. The active clock surface uses a fixed vertical safe region from 58 px through 442 px and centers all wide content, so neither top nor bottom glyphs enter the hidden corner arcs.
 
-The display bootstrap deliberately bypasses the BSP's `bsp_display_start_with_config()` helper while continuing to use its SH8601 panel and FT5x06 touch drivers. The helper registers this QSPI panel through LVGL's RGB-display path, which does not wait for SPI color-transfer completion and can reuse a draw buffer while it is still in flight. `watch_board.c` registers it through `lvgl_port_add_disp()` instead, rounds every invalidated area to the SH8601's required even boundaries, and keeps the AMOLED dark until LVGL has flushed the first complete frame. This prevents transient or persistent purple horizontal bands at the top of the panel.
+The display bootstrap deliberately bypasses the BSP's `bsp_display_start_with_config()` helper while continuing to use its SH8601 panel and FT5x06 touch drivers. The helper registers this QSPI panel through LVGL's RGB-display path, which does not wait for SPI color-transfer completion and can reuse a draw buffer while it is still in flight. `smart_os_board.c` registers it through `lvgl_port_add_disp()` instead, rounds every invalidated area to the SH8601's required even boundaries, and keeps the AMOLED dark until LVGL has flushed the first complete frame. This prevents transient or persistent purple horizontal bands at the top of the panel.
 
 The ESP-IDF main task uses an 8 KiB stack because boot now owns the explicit panel, LVGL port, and touch initialization call chain before handing periodic work to the maintenance task.
 
@@ -228,7 +230,7 @@ The built-in `smoke-ui` scenario validates native UI/runtime milestones through 
 - `boot-ui stage="launching clock" progress=100`
 - `clock demo wasm.demo.clock time=`
 - `clock-ui rendered time=`
-- `smartesp started`
+- `SmartOS started`
 
 Validate the compiled WASM app results with `node tests/test_wasm_apps.mjs`.
 

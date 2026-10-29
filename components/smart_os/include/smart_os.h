@@ -10,9 +10,9 @@ typedef struct {
     bool auto_launch_demo_app;
     uint32_t internal_ram_floor_bytes;
     uint32_t psram_floor_bytes;
-} watch_os_config_t;
+} smart_os_config_t;
 
-#define WATCH_OS_DEFAULT_CONFIG()                       \
+#define SMART_OS_DEFAULT_CONFIG()                       \
     {                                                   \
         .prefer_sdcard_runtime = true,                  \
         .auto_launch_demo_app = true,                   \
@@ -20,4 +20,4 @@ typedef struct {
         .psram_floor_bytes = 512 * 1024,                \
     }
 
-esp_err_t watch_os_start(const watch_os_config_t *config);
+esp_err_t smart_os_start(const smart_os_config_t *config);

@@ -14,7 +14,7 @@
 #include "esp_log.h"
 #include "esp_vfs_fat.h"
 
-static const char *TAG = "watch_storage";
+static const char *TAG = "smart_os_storage";
 
 // The Waveshare 2.06" board wires the microSD in 1-bit SDMMC mode and has no
 // external pull-ups on CMD/D0. bsp_sdcard_mount() leaves the internal pull-ups
@@ -138,7 +138,7 @@ static esp_err_t ensure_parent_directories(const char *path)
     return ESP_OK;
 }
 
-esp_err_t watch_storage_init(watch_storage_t *storage, bool prefer_sdcard_runtime)
+esp_err_t smart_os_storage_init(smart_os_storage_t *storage, bool prefer_sdcard_runtime)
 {
     esp_err_t mount_err;
     if (storage == NULL) {
@@ -181,29 +181,29 @@ esp_err_t watch_storage_init(watch_storage_t *storage, bool prefer_sdcard_runtim
     return ESP_OK;
 }
 
-bool watch_storage_available(const watch_storage_t *storage)
+bool smart_os_storage_available(const smart_os_storage_t *storage)
 {
     return (storage != NULL) && storage->mounted;
 }
 
-const char *watch_storage_root(const watch_storage_t *storage)
+const char *smart_os_storage_root(const smart_os_storage_t *storage)
 {
     return (storage != NULL) ? storage->runtime_dir : "";
 }
 
-const char *watch_storage_apps_root(const watch_storage_t *storage)
+const char *smart_os_storage_apps_root(const smart_os_storage_t *storage)
 {
     return (storage != NULL) ? storage->apps_dir : "";
 }
 
-bool watch_storage_file_exists(const char *path)
+bool smart_os_storage_file_exists(const char *path)
 {
     struct stat st = {0};
 
     return (path != NULL) && (stat(path, &st) == 0) && S_ISREG(st.st_mode);
 }
 
-esp_err_t watch_storage_make_app_wasm_path(const watch_storage_t *storage,
+esp_err_t smart_os_storage_make_app_wasm_path(const smart_os_storage_t *storage,
                                            const char *app_slug,
                                            char *out,
                                            size_t out_size)
@@ -214,7 +214,7 @@ esp_err_t watch_storage_make_app_wasm_path(const watch_storage_t *storage,
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!watch_storage_available(storage)) {
+    if (!smart_os_storage_available(storage)) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -223,20 +223,20 @@ esp_err_t watch_storage_make_app_wasm_path(const watch_storage_t *storage,
     return ESP_OK;
 }
 
-esp_err_t watch_storage_prepare_external_wasm_path(const watch_storage_t *storage, const char *path)
+esp_err_t smart_os_storage_prepare_external_wasm_path(const smart_os_storage_t *storage, const char *path)
 {
     if ((storage == NULL) || (path == NULL)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!watch_storage_available(storage)) {
+    if (!smart_os_storage_available(storage)) {
         return ESP_ERR_INVALID_STATE;
     }
 
     return ensure_parent_directories(path);
 }
 
-esp_err_t watch_storage_make_blob_path(const watch_storage_t *storage,
+esp_err_t smart_os_storage_make_blob_path(const smart_os_storage_t *storage,
                                        const char *app_id,
                                        const char *kind,
                                        uint32_t index,
@@ -249,7 +249,7 @@ esp_err_t watch_storage_make_blob_path(const watch_storage_t *storage,
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!watch_storage_available(storage)) {
+    if (!smart_os_storage_available(storage)) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -258,7 +258,7 @@ esp_err_t watch_storage_make_blob_path(const watch_storage_t *storage,
     return ESP_OK;
 }
 
-esp_err_t watch_storage_write_blob(const char *path, const uint8_t *blob, size_t size)
+esp_err_t smart_os_storage_write_blob(const char *path, const uint8_t *blob, size_t size)
 {
     FILE *file;
 
@@ -280,7 +280,7 @@ esp_err_t watch_storage_write_blob(const char *path, const uint8_t *blob, size_t
     return ESP_OK;
 }
 
-esp_err_t watch_storage_read_blob(const char *path, uint8_t **blob_out, size_t *size_out)
+esp_err_t smart_os_storage_read_blob(const char *path, uint8_t **blob_out, size_t *size_out)
 {
     FILE *file;
     uint8_t *blob = NULL;

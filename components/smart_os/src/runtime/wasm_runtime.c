@@ -14,11 +14,11 @@
 #include "fayasm_port.h"
 #include "storage.h"
 
-static const char *TAG = "watch_wasm";
+static const char *TAG = "smart_os_wasm";
 
-static watch_wasm_context_t *find_context(watch_wasm_runtime_t *runtime, const watch_os_app_descriptor_t *app)
+static smart_os_wasm_context_t *find_context(smart_os_wasm_runtime_t *runtime, const smart_os_app_descriptor_t *app)
 {
-    for (size_t i = 0; i < WATCH_WASM_MAX_CONTEXTS; ++i) {
+    for (size_t i = 0; i < SMART_OS_WASM_MAX_CONTEXTS; ++i) {
         if (runtime->contexts[i].app == app) {
             return &runtime->contexts[i];
         }
@@ -27,15 +27,15 @@ static watch_wasm_context_t *find_context(watch_wasm_runtime_t *runtime, const w
     return NULL;
 }
 
-static watch_wasm_context_t *get_or_create_context(watch_wasm_runtime_t *runtime, const watch_os_app_descriptor_t *app)
+static smart_os_wasm_context_t *get_or_create_context(smart_os_wasm_runtime_t *runtime, const smart_os_app_descriptor_t *app)
 {
-    watch_wasm_context_t *free_slot = NULL;
+    smart_os_wasm_context_t *free_slot = NULL;
 
     if ((runtime == NULL) || (app == NULL)) {
         return NULL;
     }
 
-    for (size_t i = 0; i < WATCH_WASM_MAX_CONTEXTS; ++i) {
+    for (size_t i = 0; i < SMART_OS_WASM_MAX_CONTEXTS; ++i) {
         if (runtime->contexts[i].app == app) {
             return &runtime->contexts[i];
         }
@@ -53,16 +53,16 @@ static watch_wasm_context_t *get_or_create_context(watch_wasm_runtime_t *runtime
     return free_slot;
 }
 
-static void reset_context_slot(watch_wasm_runtime_t *runtime,
-                               watch_wasm_context_t *ctx,
-                               const watch_os_app_descriptor_t *app)
+static void reset_context_slot(smart_os_wasm_runtime_t *runtime,
+                               smart_os_wasm_context_t *ctx,
+                               const smart_os_app_descriptor_t *app)
 {
     memset(ctx, 0, sizeof(*ctx));
     ctx->app = app;
     ctx->storage = runtime->storage;
 }
 
-static void publish_result(const watch_wasm_context_t *ctx, watch_wasm_result_t *result)
+static void publish_result(const smart_os_wasm_context_t *ctx, smart_os_wasm_result_t *result)
 {
     if ((ctx == NULL) || (result == NULL)) {
         return;
@@ -146,7 +146,7 @@ static int host_log_i32(fa_Runtime *runtime, const fa_RuntimeHostCall *call, voi
 static int host_app_action(fa_Runtime *runtime, const fa_RuntimeHostCall *call, void *user_data)
 {
     (void)runtime;
-    watch_wasm_context_t *ctx = user_data;
+    smart_os_wasm_context_t *ctx = user_data;
     return fa_RuntimeHostCall_expect(call, 0, 1) &&
            fa_RuntimeHostCall_set_i32(call, 0, ctx->input_action) ? FA_RUNTIME_OK : FA_RUNTIME_ERR_TRAP;
 }
@@ -154,12 +154,12 @@ static int host_app_action(fa_Runtime *runtime, const fa_RuntimeHostCall *call, 
 static int host_app_value(fa_Runtime *runtime, const fa_RuntimeHostCall *call, void *user_data)
 {
     (void)runtime;
-    watch_wasm_context_t *ctx = user_data;
+    smart_os_wasm_context_t *ctx = user_data;
     return fa_RuntimeHostCall_expect(call, 0, 1) &&
            fa_RuntimeHostCall_set_i32(call, 0, ctx->input_value) ? FA_RUNTIME_OK : FA_RUNTIME_ERR_TRAP;
 }
 
-static esp_err_t bind_common_imports(watch_wasm_context_t *ctx)
+static esp_err_t bind_common_imports(smart_os_wasm_context_t *ctx)
 {
     if (fa_Runtime_bindHostFunction(ctx->runtime, "env", "host_app_action", host_app_action, ctx) != FA_RUNTIME_OK ||
         fa_Runtime_bindHostFunction(ctx->runtime, "env", "host_app_value", host_app_value, ctx) != FA_RUNTIME_OK ||
@@ -172,9 +172,9 @@ static esp_err_t bind_common_imports(watch_wasm_context_t *ctx)
     return ESP_OK;
 }
 
-static esp_err_t load_module(watch_wasm_context_t *ctx)
+static esp_err_t load_module(smart_os_wasm_context_t *ctx)
 {
-    if (ctx->app->storage_path != NULL && watch_storage_file_exists(ctx->app->storage_path)) {
+    if (ctx->app->storage_path != NULL && smart_os_storage_file_exists(ctx->app->storage_path)) {
         ctx->module = wasm_module_init(ctx->app->storage_path);
         ESP_LOGI(TAG, "loading %s source=sd path=%s", ctx->app->id, ctx->app->storage_path);
     } else if (ctx->app->embedded_wasm != NULL && ctx->app->embedded_wasm_size > 0) {
@@ -210,7 +210,7 @@ static int jit_spill(fa_Runtime *runtime,
                      size_t program_bytes,
                      void *user_data)
 {
-    watch_wasm_context_t *ctx = user_data;
+    smart_os_wasm_context_t *ctx = user_data;
     char path[160];
     uint8_t *blob;
     size_t written = 0;
@@ -219,11 +219,11 @@ static int jit_spill(fa_Runtime *runtime,
     (void)runtime;
     (void)program_bytes;
 
-    if ((ctx == NULL) || !watch_storage_available(ctx->storage) || (needed == 0)) {
+    if ((ctx == NULL) || !smart_os_storage_available(ctx->storage) || (needed == 0)) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
-    if (watch_storage_make_blob_path(ctx->storage, ctx->app->id, "jit", function_index, path, sizeof(path)) != ESP_OK) {
+    if (smart_os_storage_make_blob_path(ctx->storage, ctx->app->id, "jit", function_index, path, sizeof(path)) != ESP_OK) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
@@ -237,7 +237,7 @@ static int jit_spill(fa_Runtime *runtime,
         return FA_RUNTIME_ERR_STREAM;
     }
 
-    if (watch_storage_write_blob(path, blob, written) != ESP_OK) {
+    if (smart_os_storage_write_blob(path, blob, written) != ESP_OK) {
         free(blob);
         return FA_RUNTIME_ERR_STREAM;
     }
@@ -248,22 +248,22 @@ static int jit_spill(fa_Runtime *runtime,
 
 static int jit_load(fa_Runtime *runtime, uint32_t function_index, fa_JitProgram *program_out, void *user_data)
 {
-    watch_wasm_context_t *ctx = user_data;
+    smart_os_wasm_context_t *ctx = user_data;
     char path[160];
     uint8_t *blob = NULL;
     size_t size = 0;
 
     (void)runtime;
 
-    if ((ctx == NULL) || !watch_storage_available(ctx->storage) || (program_out == NULL)) {
+    if ((ctx == NULL) || !smart_os_storage_available(ctx->storage) || (program_out == NULL)) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
-    if (watch_storage_make_blob_path(ctx->storage, ctx->app->id, "jit", function_index, path, sizeof(path)) != ESP_OK) {
+    if (smart_os_storage_make_blob_path(ctx->storage, ctx->app->id, "jit", function_index, path, sizeof(path)) != ESP_OK) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
-    if (watch_storage_read_blob(path, &blob, &size) != ESP_OK) {
+    if (smart_os_storage_read_blob(path, &blob, &size) != ESP_OK) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
@@ -281,17 +281,17 @@ static int memory_spill(fa_Runtime *runtime,
                         const fa_RuntimeMemory *memory,
                         void *user_data)
 {
-    watch_wasm_context_t *ctx = user_data;
+    smart_os_wasm_context_t *ctx = user_data;
     char path[160];
     size_t written = 0;
     uint8_t *blob;
     const size_t needed = fa_Runtime_serializedMemorySize(runtime, memory_index);
 
-    if ((ctx == NULL) || !watch_storage_available(ctx->storage) || (memory == NULL) || (needed == 0)) {
+    if ((ctx == NULL) || !smart_os_storage_available(ctx->storage) || (memory == NULL) || (needed == 0)) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
-    if (watch_storage_make_blob_path(ctx->storage, ctx->app->id, "mem", memory_index, path, sizeof(path)) != ESP_OK) {
+    if (smart_os_storage_make_blob_path(ctx->storage, ctx->app->id, "mem", memory_index, path, sizeof(path)) != ESP_OK) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
@@ -305,7 +305,7 @@ static int memory_spill(fa_Runtime *runtime,
         return FA_RUNTIME_ERR_STREAM;
     }
 
-    if (watch_storage_write_blob(path, blob, written) != ESP_OK) {
+    if (smart_os_storage_write_blob(path, blob, written) != ESP_OK) {
         free(blob);
         return FA_RUNTIME_ERR_STREAM;
     }
@@ -319,22 +319,22 @@ static int memory_load(fa_Runtime *runtime,
                        fa_RuntimeMemory *memory,
                        void *user_data)
 {
-    watch_wasm_context_t *ctx = user_data;
+    smart_os_wasm_context_t *ctx = user_data;
     char path[160];
     uint8_t *blob = NULL;
     size_t size = 0;
 
     (void)memory;
 
-    if ((ctx == NULL) || !watch_storage_available(ctx->storage)) {
+    if ((ctx == NULL) || !smart_os_storage_available(ctx->storage)) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
-    if (watch_storage_make_blob_path(ctx->storage, ctx->app->id, "mem", memory_index, path, sizeof(path)) != ESP_OK) {
+    if (smart_os_storage_make_blob_path(ctx->storage, ctx->app->id, "mem", memory_index, path, sizeof(path)) != ESP_OK) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
-    if (watch_storage_read_blob(path, &blob, &size) != ESP_OK) {
+    if (smart_os_storage_read_blob(path, &blob, &size) != ESP_OK) {
         return FA_RUNTIME_ERR_STREAM;
     }
 
@@ -349,7 +349,7 @@ static int memory_load(fa_Runtime *runtime,
 
 static int function_trap(fa_Runtime *runtime, uint32_t function_index, void *user_data)
 {
-    watch_wasm_context_t *ctx = user_data;
+    smart_os_wasm_context_t *ctx = user_data;
 
     if ((ctx == NULL) || (function_index != ctx->entry_function_index)) {
         return FA_RUNTIME_OK;
@@ -364,7 +364,7 @@ static int function_trap(fa_Runtime *runtime, uint32_t function_index, void *use
     return FA_RUNTIME_OK;
 }
 
-static esp_err_t init_runtime_context(watch_wasm_context_t *ctx)
+static esp_err_t init_runtime_context(smart_os_wasm_context_t *ctx)
 {
     fa_RuntimeSpillHooks spill_hooks;
     fa_RuntimeTrapHooks trap_hooks;
@@ -423,7 +423,7 @@ static esp_err_t init_runtime_context(watch_wasm_context_t *ctx)
     return ESP_OK;
 }
 
-static void free_context(watch_wasm_context_t *ctx)
+static void free_context(smart_os_wasm_context_t *ctx)
 {
     if (ctx == NULL) {
         return;
@@ -446,7 +446,7 @@ static void free_context(watch_wasm_context_t *ctx)
     ctx->hibernated = false;
 }
 
-esp_err_t watch_wasm_runtime_init(watch_wasm_runtime_t *runtime, const watch_storage_t *storage)
+esp_err_t smart_os_wasm_runtime_init(smart_os_wasm_runtime_t *runtime, const smart_os_storage_t *storage)
 {
     if ((runtime == NULL) || (storage == NULL)) {
         return ESP_ERR_INVALID_ARG;
@@ -457,22 +457,22 @@ esp_err_t watch_wasm_runtime_init(watch_wasm_runtime_t *runtime, const watch_sto
     return ESP_OK;
 }
 
-esp_err_t watch_wasm_runtime_run(watch_wasm_runtime_t *runtime,
-                                 const watch_os_app_descriptor_t *app,
-                                 watch_wasm_result_t *result)
+esp_err_t smart_os_wasm_runtime_run(smart_os_wasm_runtime_t *runtime,
+                                 const smart_os_app_descriptor_t *app,
+                                 smart_os_wasm_result_t *result)
 {
-    return watch_wasm_runtime_run_with_input(runtime, app, 0, 0, result);
+    return smart_os_wasm_runtime_run_with_input(runtime, app, 0, 0, result);
 }
 
-esp_err_t watch_wasm_runtime_run_with_input(watch_wasm_runtime_t *runtime,
-                                            const watch_os_app_descriptor_t *app,
+esp_err_t smart_os_wasm_runtime_run_with_input(smart_os_wasm_runtime_t *runtime,
+                                            const smart_os_app_descriptor_t *app,
                                             int32_t action, int32_t input_value,
-                                            watch_wasm_result_t *result)
+                                            smart_os_wasm_result_t *result)
 {
-    watch_wasm_context_t *ctx;
+    smart_os_wasm_context_t *ctx;
     const fa_JobValue *value;
 
-    if ((runtime == NULL) || (app == NULL) || (app->kind != WATCH_APP_KIND_WASM)) {
+    if ((runtime == NULL) || (app == NULL) || (app->kind != SMART_OS_APP_KIND_WASM)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -491,7 +491,7 @@ esp_err_t watch_wasm_runtime_run_with_input(watch_wasm_runtime_t *runtime,
     }
 
     if (ctx->hibernated) {
-        (void)watch_wasm_runtime_resume(runtime, app, NULL);
+        (void)smart_os_wasm_runtime_resume(runtime, app, NULL);
     }
 
     ctx->input_action = action;
@@ -515,17 +515,17 @@ esp_err_t watch_wasm_runtime_run_with_input(watch_wasm_runtime_t *runtime,
     return ESP_OK;
 }
 
-esp_err_t watch_wasm_runtime_hibernate(watch_wasm_runtime_t *runtime,
-                                       const watch_os_app_descriptor_t *app,
-                                       watch_wasm_result_t *result)
+esp_err_t smart_os_wasm_runtime_hibernate(smart_os_wasm_runtime_t *runtime,
+                                       const smart_os_app_descriptor_t *app,
+                                       smart_os_wasm_result_t *result)
 {
-    watch_wasm_context_t *ctx = find_context(runtime, app);
+    smart_os_wasm_context_t *ctx = find_context(runtime, app);
 
     if (ctx == NULL || !ctx->loaded) {
         return ESP_OK;
     }
 
-    if (!watch_storage_available(ctx->storage)) {
+    if (!smart_os_storage_available(ctx->storage)) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -539,11 +539,11 @@ esp_err_t watch_wasm_runtime_hibernate(watch_wasm_runtime_t *runtime,
     return ESP_OK;
 }
 
-esp_err_t watch_wasm_runtime_resume(watch_wasm_runtime_t *runtime,
-                                    const watch_os_app_descriptor_t *app,
-                                    watch_wasm_result_t *result)
+esp_err_t smart_os_wasm_runtime_resume(smart_os_wasm_runtime_t *runtime,
+                                    const smart_os_app_descriptor_t *app,
+                                    smart_os_wasm_result_t *result)
 {
-    watch_wasm_context_t *ctx = find_context(runtime, app);
+    smart_os_wasm_context_t *ctx = find_context(runtime, app);
 
     if (ctx == NULL || !ctx->loaded) {
         return ESP_ERR_NOT_FOUND;
@@ -559,9 +559,9 @@ esp_err_t watch_wasm_runtime_resume(watch_wasm_runtime_t *runtime,
     return ESP_OK;
 }
 
-esp_err_t watch_wasm_runtime_unload(watch_wasm_runtime_t *runtime, const watch_os_app_descriptor_t *app)
+esp_err_t smart_os_wasm_runtime_unload(smart_os_wasm_runtime_t *runtime, const smart_os_app_descriptor_t *app)
 {
-    watch_wasm_context_t *ctx = find_context(runtime, app);
+    smart_os_wasm_context_t *ctx = find_context(runtime, app);
 
     if (ctx == NULL) {
         return ESP_OK;

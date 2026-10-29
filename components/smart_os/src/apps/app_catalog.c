@@ -3,12 +3,12 @@
 #include "clock_demo_wasm.h"
 #include "sample_add_wasm.h"
 
-static const watch_os_app_descriptor_t k_catalog[] = {
+static const smart_os_app_descriptor_t k_catalog[] = {
     {
         .id = "sys.ui",
         .title = "Shell",
-        .kind = WATCH_APP_KIND_NATIVE,
-        .residency = WATCH_APP_RESIDENCY_ALWAYS_RESIDENT,
+        .kind = SMART_OS_APP_KIND_NATIVE,
+        .residency = SMART_OS_APP_RESIDENCY_ALWAYS_RESIDENT,
         .ram_budget_bytes = 64 * 1024,
         .autostart = true,
         .native_critical_ui = true,
@@ -16,8 +16,8 @@ static const watch_os_app_descriptor_t k_catalog[] = {
     {
         .id = "sys.input",
         .title = "Input",
-        .kind = WATCH_APP_KIND_NATIVE,
-        .residency = WATCH_APP_RESIDENCY_ALWAYS_RESIDENT,
+        .kind = SMART_OS_APP_KIND_NATIVE,
+        .residency = SMART_OS_APP_RESIDENCY_ALWAYS_RESIDENT,
         .ram_budget_bytes = 32 * 1024,
         .autostart = true,
         .native_critical_ui = true,
@@ -25,8 +25,8 @@ static const watch_os_app_descriptor_t k_catalog[] = {
     {
         .id = "sys.notifications",
         .title = "Notifications",
-        .kind = WATCH_APP_KIND_NATIVE,
-        .residency = WATCH_APP_RESIDENCY_RESIDENT_WHILE_ACTIVE,
+        .kind = SMART_OS_APP_KIND_NATIVE,
+        .residency = SMART_OS_APP_RESIDENCY_RESIDENT_WHILE_ACTIVE,
         .ram_budget_bytes = 48 * 1024,
         .autostart = true,
         .native_critical_ui = false,
@@ -34,8 +34,8 @@ static const watch_os_app_descriptor_t k_catalog[] = {
     {
         .id = "wasm.demo.clock",
         .title = "Watch",
-        .kind = WATCH_APP_KIND_WASM,
-        .residency = WATCH_APP_RESIDENCY_HIBERNABLE,
+        .kind = SMART_OS_APP_KIND_WASM,
+        .residency = SMART_OS_APP_RESIDENCY_HIBERNABLE,
         .ram_budget_bytes = 96 * 1024,
         .autostart = true,
         .native_critical_ui = false,
@@ -47,8 +47,8 @@ static const watch_os_app_descriptor_t k_catalog[] = {
     {
         .id = "wasm.settings",
         .title = "Settings",
-        .kind = WATCH_APP_KIND_WASM,
-        .residency = WATCH_APP_RESIDENCY_DISPOSABLE,
+        .kind = SMART_OS_APP_KIND_WASM,
+        .residency = SMART_OS_APP_RESIDENCY_DISPOSABLE,
         .ram_budget_bytes = 96 * 1024,
         .entry_export = "run",
         .storage_path = "/sdcard/apps/settings/app.wasm",
@@ -56,8 +56,8 @@ static const watch_os_app_descriptor_t k_catalog[] = {
     {
         .id = "wasm.demo.add",
         .title = "Demo Add",
-        .kind = WATCH_APP_KIND_WASM,
-        .residency = WATCH_APP_RESIDENCY_HIBERNABLE,
+        .kind = SMART_OS_APP_KIND_WASM,
+        .residency = SMART_OS_APP_RESIDENCY_HIBERNABLE,
         .ram_budget_bytes = 96 * 1024,
         .autostart = false,
         .native_critical_ui = false,
@@ -68,8 +68,8 @@ static const watch_os_app_descriptor_t k_catalog[] = {
     {
         .id = "wasm.workout.stub",
         .title = "Workout",
-        .kind = WATCH_APP_KIND_WASM,
-        .residency = WATCH_APP_RESIDENCY_DISPOSABLE,
+        .kind = SMART_OS_APP_KIND_WASM,
+        .residency = SMART_OS_APP_RESIDENCY_DISPOSABLE,
         .ram_budget_bytes = 160 * 1024,
         .autostart = false,
         .native_critical_ui = false,
@@ -78,7 +78,7 @@ static const watch_os_app_descriptor_t k_catalog[] = {
     },
 };
 
-const watch_os_app_descriptor_t *watch_app_catalog_get(size_t *count_out)
+const smart_os_app_descriptor_t *smart_os_app_catalog_get(size_t *count_out)
 {
     if (count_out != NULL) {
         *count_out = sizeof(k_catalog) / sizeof(k_catalog[0]);

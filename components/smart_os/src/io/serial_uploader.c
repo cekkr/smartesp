@@ -18,24 +18,24 @@
 #include "driver/usb_serial_jtag_vfs.h"
 
 // Snapshot rendering traverses the LVGL tree synchronously on this task.
-#define WATCH_SERIAL_UPLOAD_TASK_STACK (12 * 1024)
-#define WATCH_SERIAL_UPLOAD_TASK_PRIO 3
-#define WATCH_SERIAL_UPLOAD_LINE_MAX 384
-#define WATCH_SERIAL_UPLOAD_CHUNK_MAX 96
+#define SMART_OS_SERIAL_UPLOAD_TASK_STACK (12 * 1024)
+#define SMART_OS_SERIAL_UPLOAD_TASK_PRIO 3
+#define SMART_OS_SERIAL_UPLOAD_LINE_MAX 384
+#define SMART_OS_SERIAL_UPLOAD_CHUNK_MAX 96
 
 typedef struct {
-    const watch_storage_t *storage;
+    const smart_os_storage_t *storage;
     FILE *file;
     size_t expected_size;
     size_t received_size;
     char target_path[160];
     char temp_path[168];
     char app_slug[48];
-} watch_serial_upload_session_t;
+} smart_os_serial_upload_session_t;
 
-static const char *TAG = "watch_serial";
+static const char *TAG = "smart_os_serial";
 static TaskHandle_t s_task;
-static watch_serial_upload_session_t s_session;
+static smart_os_serial_upload_session_t s_session;
 
 static void protocol_printf(const char *format, ...)
 {
@@ -50,7 +50,7 @@ static void protocol_printf(const char *format, ...)
 
 static void clear_session(bool remove_temp)
 {
-    const watch_storage_t *storage = s_session.storage;
+    const smart_os_storage_t *storage = s_session.storage;
 
     if (s_session.file != NULL) {
         fclose(s_session.file);
@@ -112,7 +112,7 @@ static esp_err_t begin_upload(const char *raw_slug, size_t size_bytes)
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (!watch_storage_available(s_session.storage)) {
+    if (!smart_os_storage_available(s_session.storage)) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -120,11 +120,11 @@ static esp_err_t begin_upload(const char *raw_slug, size_t size_bytes)
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (watch_storage_make_app_wasm_path(s_session.storage, safe_slug, s_session.target_path, sizeof(s_session.target_path)) != ESP_OK) {
+    if (smart_os_storage_make_app_wasm_path(s_session.storage, safe_slug, s_session.target_path, sizeof(s_session.target_path)) != ESP_OK) {
         return ESP_FAIL;
     }
 
-    if (watch_storage_prepare_external_wasm_path(s_session.storage, s_session.target_path) != ESP_OK) {
+    if (smart_os_storage_prepare_external_wasm_path(s_session.storage, s_session.target_path) != ESP_OK) {
         return ESP_FAIL;
     }
 
@@ -147,7 +147,7 @@ static esp_err_t begin_upload(const char *raw_slug, size_t size_bytes)
 
 static esp_err_t write_chunk(const char *hex)
 {
-    uint8_t decoded[WATCH_SERIAL_UPLOAD_CHUNK_MAX];
+    uint8_t decoded[SMART_OS_SERIAL_UPLOAD_CHUNK_MAX];
     size_t length = 0;
 
     if (s_session.file == NULL) {
@@ -229,13 +229,13 @@ static void handle_line(char *line)
     if (strncmp(line, "WATCH-UI ", 9) == 0) {
         int x, y;
         if (strcmp(line, "WATCH-UI BUTTON\n") == 0) {
-            watch_native_ui_request(WATCH_UI_ACTION_BUTTON);
+            smart_os_native_ui_request(SMART_OS_UI_ACTION_BUTTON);
             protocol_printf("WATCH-UI OK button");
         } else if (sscanf(line, "WATCH-UI TAP %d %d", &x, &y) == 2) {
-            err = watch_native_ui_inject_tap(x, y);
+            err = smart_os_native_ui_inject_tap(x, y);
             protocol_printf("WATCH-UI %s tap", err == ESP_OK ? "OK" : "ERROR");
         } else if (strcmp(line, "WATCH-UI SNAPSHOT\n") == 0) {
-            err = watch_native_ui_snapshot();
+            err = smart_os_native_ui_snapshot();
             if (err != ESP_OK) {
                 protocol_printf("WATCH-UI ERROR snapshot %s", esp_err_to_name(err));
             }
@@ -304,13 +304,13 @@ static void handle_line(char *line)
 
 static void serial_uploader_task(void *arg)
 {
-    char line[WATCH_SERIAL_UPLOAD_LINE_MAX];
+    char line[SMART_OS_SERIAL_UPLOAD_LINE_MAX];
     size_t used = 0;
     bool overflow = false;
 
     s_session.storage = arg;
     setvbuf(stdin, NULL, _IONBF, 0);
-    protocol_printf("WASM-UPLOAD INFO ready apps_root=%s", watch_storage_apps_root(s_session.storage));
+    protocol_printf("WASM-UPLOAD INFO ready apps_root=%s", smart_os_storage_apps_root(s_session.storage));
 
     while (true) {
         int ch = fgetc(stdin);
@@ -340,13 +340,13 @@ static void serial_uploader_task(void *arg)
     }
 }
 
-esp_err_t watch_serial_uploader_start(const watch_storage_t *storage)
+esp_err_t smart_os_serial_uploader_start(const smart_os_storage_t *storage)
 {
     if (storage == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!watch_storage_available(storage)) {
+    if (!smart_os_storage_available(storage)) {
         ESP_LOGW(TAG, "WASM install unavailable without microSD; UI diagnostics remain enabled");
     }
 
@@ -370,16 +370,16 @@ esp_err_t watch_serial_uploader_start(const watch_storage_t *storage)
     s_session.storage = storage;
 
     if (xTaskCreatePinnedToCore(serial_uploader_task,
-                                "watch_serial_upload",
-                                WATCH_SERIAL_UPLOAD_TASK_STACK,
+                                "smart_os_serial_upload",
+                                SMART_OS_SERIAL_UPLOAD_TASK_STACK,
                                 (void *)storage,
-                                WATCH_SERIAL_UPLOAD_TASK_PRIO,
+                                SMART_OS_SERIAL_UPLOAD_TASK_PRIO,
                                 &s_task,
                                 tskNO_AFFINITY) != pdPASS) {
         s_task = NULL;
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "serial uploader enabled for %s", watch_storage_apps_root(storage));
+    ESP_LOGI(TAG, "serial uploader enabled for %s", smart_os_storage_apps_root(storage));
     return ESP_OK;
 }

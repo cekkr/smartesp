@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS
-        "src/watch_os.c"
-        "src/board/watch_board.c"
+        "src/smart_os.c"
+        "src/board/smart_os_board.c"
         "src/ui/native_ui.c"
         "src/ui/app_menu.c"
         "src/storage/storage.c"

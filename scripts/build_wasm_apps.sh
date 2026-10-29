@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="${ROOT_DIR}/wasm_apps/clock_demo/clock_demo.c"
 OUT_DIR="${ROOT_DIR}/wasm_apps/build"
 OUT_WASM="${OUT_DIR}/clock_demo.wasm"
-OUT_HEADER="${ROOT_DIR}/components/watch_os/src/apps/clock_demo_wasm.h"
+OUT_HEADER="${ROOT_DIR}/components/smart_os/src/apps/clock_demo_wasm.h"
 EMCC_BIN="${EMCC:-emcc}"
 EMCC_ENV=()
 

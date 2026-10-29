@@ -1,6 +1,6 @@
 #include "esp_check.h"
 #include "nvs_flash.h"
-#include "watch_os.h"
+#include "smart_os.h"
 
 void app_main(void)
 {
@@ -11,6 +11,6 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(err);
 
-    const watch_os_config_t config = WATCH_OS_DEFAULT_CONFIG();
-    ESP_ERROR_CHECK(watch_os_start(&config));
+    const smart_os_config_t config = SMART_OS_DEFAULT_CONFIG();
+    ESP_ERROR_CHECK(smart_os_start(&config));
 }

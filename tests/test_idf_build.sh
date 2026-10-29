@@ -49,7 +49,7 @@ Built-in scenarios:
     - boot-ui stage="launching clock" progress=100
     - clock demo wasm.demo.clock time=
     - clock-ui rendered time=
-    - smartesp started
+    - SmartOS started
 EOF
 }
 
@@ -193,7 +193,7 @@ case "$SCENARIO" in
         append_expect_log 'boot-ui stage="launching clock" progress=100'
         append_expect_log 'clock demo wasm.demo.clock time='
         append_expect_log 'clock-ui rendered time='
-        append_expect_log 'smartesp started'
+        append_expect_log 'SmartOS started'
         ;;
     none)
         ;;
@@ -320,4 +320,4 @@ PY
     fi
 fi
 
-printf '\nsmartesp validation succeeded.\n'
+printf '\nSmartOS validation succeeded.\n'

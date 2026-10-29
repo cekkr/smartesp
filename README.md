@@ -1,6 +1,6 @@
-# SmartOS
+# SmartESP
 
-SmartOS (`smart_os`) is an ESP-IDF smartwatch OS scaffold for the Waveshare ESP32-S3 Touch AMOLED 2.06 board, developed in the `smartesp` repository. It keeps the watch shell, boot flows, and sensitive shared UI native in C, while executing selected applications through [`fayasm`](https://github.com/Geckos-Ink/fayasm) as WebAssembly workloads.
+SmartESP (`smart_os`) is an ESP-IDF smartwatch OS scaffold for the Waveshare ESP32-S3 Touch AMOLED 2.06 board, developed in the `smartesp` repository. It keeps the watch shell, boot flows, and sensitive shared UI native in C, while executing selected applications through [`fayasm`](https://github.com/Geckos-Ink/fayasm) as WebAssembly workloads.
 
 The ESP-IDF project and OS component are named `smart_os`. Include `smart_os.h` and start the OS with `smart_os_start()` and `SMART_OS_DEFAULT_CONFIG()`; OS types/functions use `smart_os_*` and constants use `SMART_OS_*`. Firmware artifacts are `smart_os.bin` and `smart_os.elf`. Boot and Watch branding display **SmartOS**. The Watch app retains its name, app IDs and SD paths stay stable, and existing `watch_settings` NVS preferences, `/sdcard/smartesp/runtime/` spill storage, and `WATCH-UI` serial diagnostics remain compatible.
 

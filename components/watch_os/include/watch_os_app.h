@@ -10,6 +10,9 @@ typedef enum {
 } watch_app_kind_t;
 
 typedef enum {
+    // Residency governs background eviction. The foreground app is protected
+    // by the process manager regardless of class; disposable Settings is
+    // explicitly unloaded by the OS when navigation leaves the app.
     WATCH_APP_RESIDENCY_ALWAYS_RESIDENT = 0,
     WATCH_APP_RESIDENCY_RESIDENT_WHILE_ACTIVE = 1,
     WATCH_APP_RESIDENCY_HIBERNABLE = 2,

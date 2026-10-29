@@ -154,6 +154,7 @@ watch_os_process_snapshot_t *watch_process_manager_pick_victim(watch_process_man
 
         if ((candidate->app == NULL) ||
             (candidate->app->kind != WATCH_APP_KIND_WASM) ||
+            candidate->foreground ||
             !candidate->resident_in_ram) {
             continue;
         }

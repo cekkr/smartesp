@@ -80,6 +80,11 @@ class SerialSession:
                 raw, _, rest = self.buffer.partition(b"\n")
                 self.buffer = bytearray(rest)
                 line = raw.decode("utf-8", errors="replace").strip()
+                # A newly opened USB console may begin with a truncated log
+                # still buffered by the device. Recover the protocol marker.
+                marker = line.find("WASM-UPLOAD ")
+                if marker >= 0:
+                    line = line[marker:]
                 if not line:
                     continue
                 print(f"< {line}")

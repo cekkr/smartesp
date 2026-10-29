@@ -28,6 +28,12 @@ static lv_obj_t *s_clock_app_title;
 static lv_obj_t *s_clock_app_caption;
 static lv_obj_t *s_clock_brand;
 
+static void open_apps(lv_event_t *event)
+{
+    (void)event;
+    watch_native_ui_request(WATCH_UI_ACTION_BUTTON);
+}
+
 typedef struct {
     lv_coord_t left;
     lv_coord_t width;
@@ -102,7 +108,7 @@ static void ensure_clock_screen(void)
     lv_obj_remove_flag(s_clock_badge, LV_OBJ_FLAG_CLICKABLE);
 
     s_clock_badge_label = lv_label_create(s_clock_badge);
-    lv_label_set_text(s_clock_badge_label, "WASM  /  LIVE");
+    lv_label_set_text(s_clock_badge_label, "WATCH");
     lv_obj_set_style_text_font(s_clock_badge_label, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(s_clock_badge_label, lv_color_hex(0x75f3d5), 0);
     lv_obj_center(s_clock_badge_label);
@@ -137,16 +143,17 @@ static void ensure_clock_screen(void)
     lv_obj_set_style_border_color(s_clock_app_card, lv_color_hex(0x263542), 0);
     lv_obj_set_style_border_width(s_clock_app_card, 1, 0);
     lv_obj_set_style_pad_all(s_clock_app_card, 0, 0);
-    lv_obj_remove_flag(s_clock_app_card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(s_clock_app_card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_clock_app_card, open_apps, LV_EVENT_CLICKED, NULL);
 
     s_clock_app_title = lv_label_create(s_clock_app_card);
-    lv_label_set_text(s_clock_app_title, "CLOCK");
+    lv_label_set_text(s_clock_app_title, "YOUR APPS");
     lv_obj_set_style_text_font(s_clock_app_title, &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(s_clock_app_title, lv_color_hex(0xf8fafc), 0);
     lv_obj_set_pos(s_clock_app_title, 22, 16);
 
     s_clock_app_caption = lv_label_create(s_clock_app_card);
-    lv_label_set_text(s_clock_app_caption, "Running in WebAssembly");
+    lv_label_set_text(s_clock_app_caption, "Tap here or press the side button");
     lv_obj_set_style_text_font(s_clock_app_caption, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(s_clock_app_caption, lv_color_hex(0x7f91a3), 0);
     lv_obj_set_pos(s_clock_app_caption, 22, 40);
@@ -316,7 +323,9 @@ esp_err_t watch_native_ui_show_clock(const watch_ui_clock_model_t *model)
     lv_label_set_text(s_clock_seconds, model->seconds);
     lv_label_set_text(s_clock_date, model->date_line);
     layout_clock_screen();
-    lv_screen_load(s_clock_screen);
+    if (lv_screen_active() != s_clock_screen) {
+        lv_screen_load(s_clock_screen);
+    }
     ESP_LOGI(TAG, "clock-ui rendered time=%s:%s", model->hour_minute, model->seconds);
 
     watch_board_unlock();

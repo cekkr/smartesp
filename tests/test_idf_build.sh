@@ -3,7 +3,8 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-IDF_PATH_DEFAULT="/Users/riccardo/esp/esp-idf-v6.0.1"
+IDF_PATH_DEFAULT="/Users/richard/esp-idf/esp-idf-v6.1/v6.1/esp-idf"
+IDF_ACTIVATE_SCRIPT="${IDF_ACTIVATE_SCRIPT:-}"
 IDF_PATH_INPUT="${IDF_PATH:-$IDF_PATH_DEFAULT}"
 BUILD_DIR="${BUILD_DIR:-build-test}"
 TARGET="${TARGET:-esp32s3}"
@@ -66,11 +67,20 @@ run_in_idf_env() {
         set -eu
         IDF_ROOT=$1
         PROJECT_ROOT=$2
-        shift 2
-        . "$IDF_ROOT/export.sh" >/dev/null
+        ACTIVATE_SCRIPT=$3
+        shift 3
+        if [ -f "$ACTIVATE_SCRIPT" ]; then
+            # EIM activation scripts inspect positional args and may return a
+            # nonzero completion status even after a successful activation.
+            set +u
+            . "$ACTIVATE_SCRIPT" >/dev/null || true
+            set -u
+        else
+            . "$IDF_ROOT/export.sh" >/dev/null
+        fi
         cd "$PROJECT_ROOT"
         "$@"
-    ' sh "$IDF_PATH_INPUT" "$ROOT_DIR" "$@"
+    ' sh "$IDF_PATH_INPUT" "$ROOT_DIR" "$IDF_ACTIVATE_SCRIPT" "$@"
 }
 
 project_target_matches() {
@@ -158,6 +168,11 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
+
+if [ -z "$IDF_ACTIVATE_SCRIPT" ] && [ "$IDF_PATH_INPUT" = "$IDF_PATH_DEFAULT" ] &&
+   [ -f /Users/richard/.espressif/tools/activate_idf_v6.1.sh ]; then
+    IDF_ACTIVATE_SCRIPT=/Users/richard/.espressif/tools/activate_idf_v6.1.sh
+fi
 
 if [ "$SHOW_HELP" -eq 1 ]; then
     usage

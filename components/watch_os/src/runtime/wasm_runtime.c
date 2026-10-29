@@ -143,9 +143,27 @@ static int host_log_i32(fa_Runtime *runtime, const fa_RuntimeHostCall *call, voi
     return FA_RUNTIME_OK;
 }
 
+static int host_app_action(fa_Runtime *runtime, const fa_RuntimeHostCall *call, void *user_data)
+{
+    (void)runtime;
+    watch_wasm_context_t *ctx = user_data;
+    return fa_RuntimeHostCall_expect(call, 0, 1) &&
+           fa_RuntimeHostCall_set_i32(call, 0, ctx->input_action) ? FA_RUNTIME_OK : FA_RUNTIME_ERR_TRAP;
+}
+
+static int host_app_value(fa_Runtime *runtime, const fa_RuntimeHostCall *call, void *user_data)
+{
+    (void)runtime;
+    watch_wasm_context_t *ctx = user_data;
+    return fa_RuntimeHostCall_expect(call, 0, 1) &&
+           fa_RuntimeHostCall_set_i32(call, 0, ctx->input_value) ? FA_RUNTIME_OK : FA_RUNTIME_ERR_TRAP;
+}
+
 static esp_err_t bind_common_imports(watch_wasm_context_t *ctx)
 {
-    if (fa_Runtime_bindHostFunction(ctx->runtime, "env", "host_add", host_add, ctx) != FA_RUNTIME_OK ||
+    if (fa_Runtime_bindHostFunction(ctx->runtime, "env", "host_app_action", host_app_action, ctx) != FA_RUNTIME_OK ||
+        fa_Runtime_bindHostFunction(ctx->runtime, "env", "host_app_value", host_app_value, ctx) != FA_RUNTIME_OK ||
+        fa_Runtime_bindHostFunction(ctx->runtime, "env", "host_add", host_add, ctx) != FA_RUNTIME_OK ||
         fa_Runtime_bindHostFunction(ctx->runtime, "env", "host_time_ms", host_time_ms, ctx) != FA_RUNTIME_OK ||
         fa_Runtime_bindHostFunction(ctx->runtime, "env", "host_log_i32", host_log_i32, ctx) != FA_RUNTIME_OK) {
         return ESP_FAIL;
@@ -156,7 +174,11 @@ static esp_err_t bind_common_imports(watch_wasm_context_t *ctx)
 
 static esp_err_t load_module(watch_wasm_context_t *ctx)
 {
-    if (ctx->app->embedded_wasm != NULL && ctx->app->embedded_wasm_size > 0) {
+    if (ctx->app->storage_path != NULL && watch_storage_file_exists(ctx->app->storage_path)) {
+        ctx->module = wasm_module_init(ctx->app->storage_path);
+        ESP_LOGI(TAG, "loading %s source=sd path=%s", ctx->app->id, ctx->app->storage_path);
+    } else if (ctx->app->embedded_wasm != NULL && ctx->app->embedded_wasm_size > 0) {
+        ESP_LOGW(TAG, "loading %s source=embedded fallback", ctx->app->id);
         ctx->module = wasm_module_init_from_memory(ctx->app->embedded_wasm, ctx->app->embedded_wasm_size);
     } else if (ctx->app->storage_path != NULL) {
         ctx->module = wasm_module_init(ctx->app->storage_path);
@@ -439,6 +461,14 @@ esp_err_t watch_wasm_runtime_run(watch_wasm_runtime_t *runtime,
                                  const watch_os_app_descriptor_t *app,
                                  watch_wasm_result_t *result)
 {
+    return watch_wasm_runtime_run_with_input(runtime, app, 0, 0, result);
+}
+
+esp_err_t watch_wasm_runtime_run_with_input(watch_wasm_runtime_t *runtime,
+                                            const watch_os_app_descriptor_t *app,
+                                            int32_t action, int32_t input_value,
+                                            watch_wasm_result_t *result)
+{
     watch_wasm_context_t *ctx;
     const fa_JobValue *value;
 
@@ -464,6 +494,9 @@ esp_err_t watch_wasm_runtime_run(watch_wasm_runtime_t *runtime,
         (void)watch_wasm_runtime_resume(runtime, app, NULL);
     }
 
+    ctx->input_action = action;
+    ctx->input_value = input_value;
+    ctx->has_last_result = false;
     fa_JobStack_reset(&ctx->job->stack);
     ctx->last_status = fa_Runtime_executeJob(ctx->runtime, ctx->job, ctx->entry_function_index);
     if (ctx->last_status != FA_RUNTIME_OK) {

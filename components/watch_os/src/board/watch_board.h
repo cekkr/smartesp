@@ -11,3 +11,5 @@ bool watch_board_lock(uint32_t timeout_ms);
 void watch_board_unlock(void);
 lv_display_t *watch_board_display(void);
 esp_err_t watch_board_present_first_frame(void);
+bool watch_board_poll_button(void);
+esp_err_t watch_board_set_brightness(uint8_t percent);

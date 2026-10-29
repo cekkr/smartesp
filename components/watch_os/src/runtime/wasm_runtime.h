@@ -24,6 +24,8 @@ typedef struct {
     bool has_last_result;
     int32_t last_result_i32;
     int last_status;
+    int32_t input_action;
+    int32_t input_value;
 } watch_wasm_context_t;
 
 typedef struct {
@@ -43,6 +45,10 @@ esp_err_t watch_wasm_runtime_init(watch_wasm_runtime_t *runtime, const watch_sto
 esp_err_t watch_wasm_runtime_run(watch_wasm_runtime_t *runtime,
                                  const watch_os_app_descriptor_t *app,
                                  watch_wasm_result_t *result);
+esp_err_t watch_wasm_runtime_run_with_input(watch_wasm_runtime_t *runtime,
+                                            const watch_os_app_descriptor_t *app,
+                                            int32_t action, int32_t value,
+                                            watch_wasm_result_t *result);
 esp_err_t watch_wasm_runtime_hibernate(watch_wasm_runtime_t *runtime,
                                        const watch_os_app_descriptor_t *app,
                                        watch_wasm_result_t *result);

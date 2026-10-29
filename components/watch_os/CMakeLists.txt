@@ -3,6 +3,7 @@ idf_component_register(
         "src/watch_os.c"
         "src/board/watch_board.c"
         "src/ui/native_ui.c"
+        "src/ui/app_menu.c"
         "src/storage/storage.c"
         "src/kernel/process_manager.c"
         "src/runtime/wasm_runtime.c"
@@ -29,4 +30,7 @@ idf_component_register(
     PRIV_REQUIRES
         fatfs
         esp_driver_sdmmc
+        esp_driver_gpio
+        esp_driver_i2c
+        esp_driver_usb_serial_jtag
 )

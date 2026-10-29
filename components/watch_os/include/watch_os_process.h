@@ -17,6 +17,7 @@ typedef struct {
     const watch_os_app_descriptor_t *app;
     watch_process_state_t state;
     bool resident_in_ram;
+    bool foreground; // Active app is protected from memory-pressure eviction.
     bool has_last_result;
     int32_t last_result_i32;
     int last_runtime_status;

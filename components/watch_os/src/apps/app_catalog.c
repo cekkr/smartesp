@@ -33,7 +33,7 @@ static const watch_os_app_descriptor_t k_catalog[] = {
     },
     {
         .id = "wasm.demo.clock",
-        .title = "Clock",
+        .title = "Watch",
         .kind = WATCH_APP_KIND_WASM,
         .residency = WATCH_APP_RESIDENCY_HIBERNABLE,
         .ram_budget_bytes = 96 * 1024,
@@ -42,6 +42,16 @@ static const watch_os_app_descriptor_t k_catalog[] = {
         .entry_export = "run",
         .embedded_wasm = k_watch_demo_clock_wasm,
         .embedded_wasm_size = sizeof(k_watch_demo_clock_wasm),
+        .storage_path = "/sdcard/apps/watch/app.wasm",
+    },
+    {
+        .id = "wasm.settings",
+        .title = "Settings",
+        .kind = WATCH_APP_KIND_WASM,
+        .residency = WATCH_APP_RESIDENCY_DISPOSABLE,
+        .ram_budget_bytes = 96 * 1024,
+        .entry_export = "run",
+        .storage_path = "/sdcard/apps/settings/app.wasm",
     },
     {
         .id = "wasm.demo.add",

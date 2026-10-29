@@ -12,8 +12,13 @@
 #include "freertos/task.h"
 
 #include "esp_log.h"
+#include "native_ui.h"
+#include "esp_check.h"
+#include "driver/usb_serial_jtag.h"
+#include "driver/usb_serial_jtag_vfs.h"
 
-#define WATCH_SERIAL_UPLOAD_TASK_STACK 6144
+// Snapshot rendering traverses the LVGL tree synchronously on this task.
+#define WATCH_SERIAL_UPLOAD_TASK_STACK (12 * 1024)
 #define WATCH_SERIAL_UPLOAD_TASK_PRIO 3
 #define WATCH_SERIAL_UPLOAD_LINE_MAX 384
 #define WATCH_SERIAL_UPLOAD_CHUNK_MAX 96
@@ -221,6 +226,25 @@ static void handle_line(char *line)
         return;
     }
 
+    if (strncmp(line, "WATCH-UI ", 9) == 0) {
+        int x, y;
+        if (strcmp(line, "WATCH-UI BUTTON\n") == 0) {
+            watch_native_ui_request(WATCH_UI_ACTION_BUTTON);
+            protocol_printf("WATCH-UI OK button");
+        } else if (sscanf(line, "WATCH-UI TAP %d %d", &x, &y) == 2) {
+            err = watch_native_ui_inject_tap(x, y);
+            protocol_printf("WATCH-UI %s tap", err == ESP_OK ? "OK" : "ERROR");
+        } else if (strcmp(line, "WATCH-UI SNAPSHOT\n") == 0) {
+            err = watch_native_ui_snapshot();
+            if (err != ESP_OK) {
+                protocol_printf("WATCH-UI ERROR snapshot %s", esp_err_to_name(err));
+            }
+        } else {
+            protocol_printf("WATCH-UI ERROR command");
+        }
+        return;
+    }
+
     if (strncmp(line, "WASM-UPLOAD ", 12) != 0) {
         return;
     }
@@ -281,19 +305,38 @@ static void handle_line(char *line)
 static void serial_uploader_task(void *arg)
 {
     char line[WATCH_SERIAL_UPLOAD_LINE_MAX];
+    size_t used = 0;
+    bool overflow = false;
 
     s_session.storage = arg;
     setvbuf(stdin, NULL, _IONBF, 0);
     protocol_printf("WASM-UPLOAD INFO ready apps_root=%s", watch_storage_apps_root(s_session.storage));
 
     while (true) {
-        if (fgets(line, sizeof(line), stdin) == NULL) {
+        int ch = fgetc(stdin);
+        if (ch == EOF) {
             clearerr(stdin);
-            vTaskDelay(pdMS_TO_TICKS(50));
+            vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
-
-        handle_line(line);
+        if (ch == '\r') {
+            continue;
+        }
+        if (ch == '\n') {
+            if (overflow) {
+                protocol_printf("WASM-UPLOAD ERROR line-too-long");
+            } else {
+                line[used++] = '\n';
+                line[used] = '\0';
+                handle_line(line);
+            }
+            used = 0;
+            overflow = false;
+        } else if (used + 2 < sizeof(line)) {
+            line[used++] = (char)ch;
+        } else {
+            overflow = true;
+        }
     }
 }
 
@@ -304,13 +347,24 @@ esp_err_t watch_serial_uploader_start(const watch_storage_t *storage)
     }
 
     if (!watch_storage_available(storage)) {
-        ESP_LOGW(TAG, "serial uploader disabled until microSD is mounted");
-        return ESP_ERR_INVALID_STATE;
+        ESP_LOGW(TAG, "WASM install unavailable without microSD; UI diagnostics remain enabled");
     }
 
     if (s_task != NULL) {
         return ESP_OK;
     }
+
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+    if (!usb_serial_jtag_is_driver_installed()) {
+        usb_serial_jtag_driver_config_t config = {
+            .rx_buffer_size = 1024,
+            .tx_buffer_size = 2048,
+        };
+        ESP_RETURN_ON_ERROR(usb_serial_jtag_driver_install(&config), TAG, "USB serial driver install failed");
+    }
+    usb_serial_jtag_vfs_use_driver();
+    usb_serial_jtag_vfs_set_rx_line_endings(ESP_LINE_ENDINGS_LF);
+#endif
 
     clear_session(false);
     s_session.storage = storage;

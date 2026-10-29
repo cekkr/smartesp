@@ -13,12 +13,16 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
+#include "nvs.h"
 #include "native_ui.h"
 #include "process_manager.h"
 #include "serial_uploader.h"
 #include "storage.h"
 #include "wasm_runtime.h"
 #include "watch_board.h"
+
+typedef enum { WATCH_VIEW_WATCH, WATCH_VIEW_APPS, WATCH_VIEW_SETTINGS, WATCH_VIEW_ERROR } watch_view_t;
 
 typedef struct {
     watch_os_config_t config;
@@ -27,6 +31,9 @@ typedef struct {
     watch_process_manager_t process_manager;
     TaskHandle_t maintenance_task;
     int64_t last_clock_tick_seconds;
+    QueueHandle_t actions;
+    watch_view_t view;
+    uint8_t brightness;
 } watch_os_state_t;
 
 static const char *TAG = "watch_os";
@@ -135,10 +142,6 @@ static esp_err_t tick_clock_demo_if_due(void)
     const int64_t now_seconds = (int64_t)(esp_timer_get_time() / 1000000);
     esp_err_t err;
 
-    if (!s_state.config.auto_launch_demo_app) {
-        return ESP_OK;
-    }
-
     if (s_state.last_clock_tick_seconds == now_seconds) {
         return ESP_OK;
     }
@@ -198,15 +201,161 @@ static void handle_memory_pressure(void)
     }
 }
 
+static void request_action(watch_ui_action_t action)
+{
+    if (s_state.actions != NULL && xQueueSend(s_state.actions, &action, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "app action queue full");
+    }
+}
+
+static void set_foreground(const char *id)
+{
+    for (size_t i = 0; i < s_state.process_manager.count; ++i) {
+        watch_os_process_snapshot_t *process = &s_state.process_manager.slots[i];
+        process->foreground = id != NULL && strcmp(process->app->id, id) == 0;
+    }
+}
+
+static void read_brightness(void)
+{
+    nvs_handle_t handle;
+    s_state.brightness = 80;
+    if (nvs_open("watch_settings", NVS_READONLY, &handle) == ESP_OK) {
+        (void)nvs_get_u8(handle, "brightness", &s_state.brightness);
+        nvs_close(handle);
+    }
+    if (s_state.brightness < 20 || s_state.brightness > 100) {
+        s_state.brightness = 80;
+    }
+    (void)watch_board_set_brightness(s_state.brightness);
+}
+
+static void persist_brightness(void)
+{
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("watch_settings", NVS_READWRITE, &handle);
+    if (err == ESP_OK) {
+        err = nvs_set_u8(handle, "brightness", s_state.brightness);
+        if (err == ESP_OK) {
+            err = nvs_commit(handle);
+        }
+        nvs_close(handle);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "brightness persistence failed: %s", esp_err_to_name(err));
+    }
+}
+
+static void close_settings(void)
+{
+    watch_os_process_snapshot_t *process = watch_process_manager_find(&s_state.process_manager, "wasm.settings");
+    if (process != NULL) {
+        (void)watch_wasm_runtime_unload(&s_state.wasm_runtime, process->app);
+        watch_process_manager_mark_state(process, WATCH_PROCESS_STOPPED, false);
+    }
+}
+
+static void open_watch(void)
+{
+    s_state.view = WATCH_VIEW_WATCH;
+    set_foreground("wasm.demo.clock");
+    s_state.last_clock_tick_seconds = -1;
+    if (tick_clock_demo_if_due() == ESP_OK) {
+        update_clock_ui();
+    } else {
+        s_state.view = WATCH_VIEW_ERROR;
+        set_foreground(NULL);
+        (void)watch_native_ui_show_app_error("Watch");
+    }
+}
+
+static void run_settings(int32_t action)
+{
+    watch_os_process_snapshot_t *process = watch_process_manager_find(&s_state.process_manager, "wasm.settings");
+    watch_wasm_result_t result = {0};
+    if (process == NULL) {
+        return;
+    }
+    set_foreground(process->app->id);
+    watch_process_manager_mark_state(process, WATCH_PROCESS_RUNNING, true);
+    esp_err_t err = watch_wasm_runtime_run_with_input(&s_state.wasm_runtime, process->app, action,
+                                                      s_state.brightness, &result);
+    if (err == ESP_OK && (!result.has_last_result || result.last_result_i32 < 20 || result.last_result_i32 > 100)) {
+        err = ESP_ERR_INVALID_RESPONSE;
+    }
+    watch_process_manager_set_result(process, err, result.has_last_result, result.last_result_i32);
+    watch_process_manager_mark_state(process, err == ESP_OK ? WATCH_PROCESS_READY : WATCH_PROCESS_FAULTED, result.loaded);
+    if (err != ESP_OK) {
+        s_state.view = WATCH_VIEW_ERROR;
+        set_foreground(NULL);
+        (void)watch_native_ui_show_app_error("Settings");
+        return;
+    }
+    if (s_state.brightness != result.last_result_i32) {
+        err = watch_board_set_brightness((uint8_t)result.last_result_i32);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "brightness apply failed: %s", esp_err_to_name(err));
+            return;
+        }
+        s_state.brightness = (uint8_t)result.last_result_i32;
+        persist_brightness();
+    }
+    s_state.view = WATCH_VIEW_SETTINGS;
+    (void)watch_native_ui_show_settings(s_state.brightness, watch_storage_available(&s_state.storage));
+}
+
+static void handle_action(watch_ui_action_t action)
+{
+    ESP_LOGI(TAG, "app action=%d view=%d", (int)action, (int)s_state.view);
+    switch (action) {
+    case WATCH_UI_ACTION_BUTTON:
+        if (s_state.view == WATCH_VIEW_APPS) {
+            open_watch();
+        } else {
+            close_settings();
+            set_foreground(NULL);
+            s_state.view = WATCH_VIEW_APPS;
+            (void)watch_native_ui_show_apps();
+        }
+        break;
+    case WATCH_UI_ACTION_WATCH:
+        close_settings();
+        open_watch();
+        break;
+    case WATCH_UI_ACTION_SETTINGS:
+        run_settings(0);
+        break;
+    case WATCH_UI_ACTION_DIM:
+    case WATCH_UI_ACTION_BRIGHTEN:
+        if (s_state.view == WATCH_VIEW_SETTINGS) {
+            run_settings(action == WATCH_UI_ACTION_DIM ? -1 : 1);
+        }
+        break;
+    }
+}
+
 static void maintenance_task(void *arg)
 {
     (void)arg;
-
     while (true) {
+        watch_ui_action_t action;
+        if (xQueueReceive(s_state.actions, &action, pdMS_TO_TICKS(20)) == pdTRUE) {
+            handle_action(action);
+        }
+        if (watch_board_poll_button()) {
+            handle_action(WATCH_UI_ACTION_BUTTON);
+        }
+        const int64_t now_seconds = esp_timer_get_time() / 1000000;
+        if (s_state.view == WATCH_VIEW_WATCH && s_state.last_clock_tick_seconds != now_seconds) {
+            if (tick_clock_demo_if_due() == ESP_OK) {
+                update_clock_ui();
+            } else {
+                s_state.view = WATCH_VIEW_ERROR;
+                set_foreground(NULL);
+                (void)watch_native_ui_show_app_error("Watch");
+            }
+        }
         handle_memory_pressure();
-        (void)tick_clock_demo_if_due();
-        update_clock_ui();
-        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
@@ -219,6 +368,9 @@ esp_err_t watch_os_start(const watch_os_config_t *config)
     memset(&s_state, 0, sizeof(s_state));
     s_state.config = *config;
     s_state.last_clock_tick_seconds = -1;
+    s_state.actions = xQueueCreate(12, sizeof(watch_ui_action_t));
+    ESP_RETURN_ON_FALSE(s_state.actions != NULL, ESP_ERR_NO_MEM, TAG, "action queue allocation failed");
+    watch_native_ui_set_action_handler(request_action);
     seed_wall_clock_from_build();
 
     ESP_RETURN_ON_ERROR(watch_board_init(), TAG, "board init failed");
@@ -238,10 +390,15 @@ esp_err_t watch_os_start(const watch_os_config_t *config)
     prepare_external_app_storage(catalog, app_count);
 
     ESP_RETURN_ON_ERROR(watch_native_ui_show_boot("registering apps", 80), TAG, "boot ui failed");
-    (void)tick_clock_demo_if_due();
+    read_brightness();
 
     ESP_RETURN_ON_ERROR(watch_native_ui_show_boot("launching clock", 100), TAG, "boot ui failed");
-    update_clock_ui();
+    if (s_state.config.auto_launch_demo_app) {
+        open_watch();
+    } else {
+        s_state.view = WATCH_VIEW_APPS;
+        (void)watch_native_ui_show_apps();
+    }
     (void)watch_serial_uploader_start(&s_state.storage);
 
     if (s_state.maintenance_task == NULL) {

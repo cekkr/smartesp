@@ -1,138 +1,432 @@
-# AI Reference
+# SmartOS — AI Agent Reference
 
-This file is the fast path for future agents working on `smartesp`. Keep it current. If you change behavior, structure, build steps, or workflow rules, update this file and `README.md` in the same turn.
+This is the fast-access operational handbook for `smartesp`, an ESP-IDF (Espressif IoT Development Framework) smartwatch operating system (OS) scaffold for the Waveshare ESP32-S3 Touch AMOLED 2.06. **SmartOS** is the OS/product name; `smartesp` is the repository and legacy storage name, and `smart_os` is the project/component/application programming interface (API) prefix. This is a native C shell with restartable WebAssembly (WASM) app logic, not a complete watch platform, app marketplace, or production security sandbox.
 
-The OS is **SmartOS**. Its ESP-IDF project/component and source directory use `smart_os`; OS APIs/types use `smart_os_*` and constants use `SMART_OS_*`. The entry point is `smart_os_start()` in `smart_os.h`. Keep the Watch app name, installed app IDs/paths, `watch_settings` NVS namespace, `/sdcard/smartesp/runtime/` storage, and `WATCH-UI` wire protocol stable for compatibility.
+## Read This First and Sources of Truth
 
-## Non-Negotiable Directives
+1. Read this handbook completely, then [README.md](README.md) for operator setup, app catalog, visible behavior, and the **Notes for Future Work** backlog.
+2. Read [LICENSE](LICENSE) for the root project's Apache-2.0 terms. Preserve upstream licensing separately.
+3. Consult [tests](tests/), the public types in [smart_os_app.h](components/smart_os/include/smart_os_app.h), and protocol handlers in [serial_uploader.c](components/smart_os/src/io/serial_uploader.c) for executable contracts; tests prove only their assertions.
+4. Inspect the owning source and build configuration below before relying on a documentation claim. [wasm_apps/README.md](wasm_apps/README.md) governs app build/install usage.
+5. Before editing the upstream submodule, read [external/fayasm/AGENTS.md](external/fayasm/AGENTS.md) completely, then its [README](external/fayasm/README.md) and [ROADMAP](external/fayasm/ROADMAP.md). Its instructions apply inside that repository; runtime plans are not SmartOS features.
 
-- Update `README.md` every time the architecture, workflow, build steps, or runtime behavior changes.
-- Update this `AGENTS.md` every time the repository structure, coding rules, or contributor workflow changes.
-- Treat [`external/fayasm`](/Users/richard/Sources/GitHub/smartesp/external/fayasm) as an upstream submodule repository: when you need to modify `fayasm`, commit inside that repo first, then update the submodule pointer here.
-- Keep boot/loading/sensitive/shared UI paths native in C unless there is a strong and documented reason not to.
-- Keep the process residency model explicit. Do not hide swapping/hibernation decisions inside unrelated code.
-- When you add or remove apps, update the catalog documentation in `README.md` and the code map below.
+Authority order: explicit legal/safety/security/product contracts → executable specifications, public protocols and focused tests → current source/build configuration → operator documentation → backlog/design notes → history. Running code does not excuse a violated safety or product contract. Resolve disagreements by inspecting behavior and fixing or reporting the mismatch within scope; update stale documentation together. Record an unresolved conflict as a **Known gap** and ask for direction if choosing would be unsafe. No separate root security, architecture-decision, or roadmap document exists; the contracts here and README backlog own those facts.
 
-## Build Checklist
+Locate all applicable instruction files from the root to the target directory before editing. More specific instructions govern only their scope and cannot override higher-authority safety/legal/product contracts. Do not duplicate this root handbook in nested files.
 
-- Initialize submodules: `git submodule update --init --recursive`
-- ESP-IDF target: `esp32s3`
-- Expected reference board: Waveshare ESP32-S3 Touch AMOLED 2.06
-- Main build command: `idf.py build`
-- Flash/monitor: `idf.py flash monitor`
-- Primary validation script: `./tests/test_idf_build.sh`
-- After changing `external/fayasm`, run its native suite from the submodule with `./build.sh` (currently 113 tests); validate generated fixtures with both Emscripten and the Rust fallback when fixture/toolchain behavior changes.
-- Compile both user apps with Emscripten: `./scripts/build_wasm_apps.sh` (`build_clock_demo_wasm.sh` is a compatibility alias).
-- Upload `wasm_apps/build/watch.wasm` and `settings.wasm` with `push_wasm_serial.py --app watch/settings`, then reset for SD-loaded execution.
-- Activate local ESP-IDF 6.1 with `source /Users/richard/.espressif/tools/activate_idf_v6.1.sh`.
-- Run `node tests/test_wasm_apps.mjs` after app builds to validate compiled Watch encoding and Settings brightness bounds.
-- After flash, SD app upload and reset to Watch, run `./tests/test_launcher_hardware.sh --port /dev/cu.usbmodem101` for real-device LVGL input and screenshot validation.
-- Default local ESP-IDF path on this machine: `/Users/richard/esp-idf/esp-idf-v6.1/v6.1/esp-idf`
-- Use `./tests/test_idf_build.sh --no-clean` for incremental reruns when the target is unchanged.
-- `./tests/test_idf_build.sh --monitor` now resets the board and captures raw serial logs directly, so it works even when `idf_monitor` cannot attach to a TTY.
+## Collaboration and Maintenance Rules
 
-If you cannot run an ESP-IDF build in the current environment, say so clearly in the handoff.
+- Preserve unrelated dirty-tree changes. Inspect `git status --short`, the current branch, and submodule status at task start. Do not clean/reset a checkout merely to simplify discovery.
+- Update this file and [README.md](README.md) in the same turn when behavior, architecture, structure, build steps, coding rules, or contributor workflow changes. App additions/removals require the README catalog and the source/interface/feature maps here to change together.
+- Update the handbook in the **same coherent edit batch** as each changed durable fact: paths/symbols/callers/tests for source changes; flow/status for features; interfaces/configuration for new commands or flags; data/security/migration boundaries for persistence or trust changes; and pitfalls for reusable bug lessons. Remove stale owners and superseded workarounds. Formatting-only edits need no cosmetic handbook churn.
+- Record newly discovered future work or optimizations in README's **Notes for Future Work** and link it from status here. Do not describe an experiment or backlog item as shipped. Upstream research and roadmap changes belong in its scoped documents.
+- Prefer SmartOS integration changes before changing `fayasm`. If necessary, edit and **commit inside [external/fayasm](external/fayasm/)** first, synchronize its README/AGENTS for runtime behavior changes, then update the parent gitlink. Never treat upstream files as ordinary parent-repository files.
+- Change canonical app C sources, then regenerate the tracked Watch header. Do not hand-edit generated byte arrays. Keep ignored build/dependency output and device state out of commits.
+- Run focused checks appropriate to the change. Firmware changes require the ESP-IDF validation runner; app changes require rebuilding both apps and running the Node test; runtime changes require upstream native tests, plus Emscripten and Rust fixture paths when toolchain/fixture behavior changes. Visible UI changes require hardware smoke captures and refreshed [assets](assets/).
+- Before **every commit**, review the full diff for changed durable facts, validate touched links/commands and focused checks, reconcile README/backlog/upstream docs, and stage handbook changes with the behavior they describe. The committed handbook must describe the immediately resulting revision. Label intentionally partial work Experimental/scaffold or Known gap. Do not append commit summaries here; history owns chronology.
+- Report checks run, omitted checks and reasons, remaining gaps, and hardware limitations accurately. If an ESP-IDF build cannot run, state that explicitly in the handoff. Do not hard-code manually maintained test totals.
 
-## Project Map
+## Essential Project Principles
 
-Start from these files:
+### Native code owns shared and sensitive surfaces
 
-- [`assets/`](/Users/richard/Sources/GitHub/smartesp/assets): device-captured Watch, Apps, and Settings PNG screenshots embedded in `README.md`. Refresh these from the hardware smoke test captures when the visible UI changes.
+Keep boot/loading, shared shell, error presentation, input/display, power/input/notification services, and sensitive Settings hardware/NVS (non-volatile storage) operations in C. WASM computes app results; it MUST NOT call LVGL (the graphics library) directly. A departure needs a strong documented reason. Preserve board bootstrap versus OS orchestration, and runtime policy versus UI presentation.
 
-- [`main/main.c`](/Users/richard/Sources/GitHub/smartesp/main/main.c): app entrypoint.
-- [`components/smart_os/src/smart_os.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/smart_os.c): boot sequence, orchestration, periodic supervision.
-- [`components/smart_os/src/board/smart_os_board.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/board/smart_os_board.c): display/LVGL/BSP bootstrap.
-- [`components/smart_os/src/ui/app_menu.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/ui/app_menu.c): circular Watch/Settings launcher, brightness/error screens, serial pointer/snapshot diagnostics.
-- [`components/smart_os/src/ui/native_ui.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/ui/native_ui.c): native boot and shell UI in C.
-- [`components/smart_os/src/kernel/process_manager.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/kernel/process_manager.c): app slots and residency policy.
-- [`components/smart_os/src/runtime/wasm_runtime.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/runtime/wasm_runtime.c): `fayasm` execution, host bindings, spill/load hooks.
-- [`components/smart_os/src/storage/storage.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/storage/storage.c): runtime blob paths and file helpers.
-- [`components/smart_os/src/io/serial_uploader.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/io/serial_uploader.c): USB/UART stdio protocol that installs external `app.wasm` payloads onto the SD card.
-- [`components/smart_os/src/apps/app_catalog.c`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/apps/app_catalog.c): built-in app registry.
-- [`components/smart_os/src/apps/clock_demo_wasm.h`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/apps/clock_demo_wasm.h): generated Emscripten-built clock demo bytes embedded into firmware.
-- [`components/smart_os/src/apps/sample_add_wasm.h`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/src/apps/sample_add_wasm.h): embedded demo WASM bytes.
-- [`components/fayasm_port/CMakeLists.txt`](/Users/richard/Sources/GitHub/smartesp/components/fayasm_port/CMakeLists.txt): ESP-IDF wrapper over upstream `fayasm`.
-- [`wasm_apps/settings/settings.c`](/Users/richard/Sources/GitHub/smartesp/wasm_apps/settings/settings.c): SD-loaded Settings brightness policy, using `host_app_action` and `host_app_value`.
-- [`scripts/build_wasm_apps.sh`](/Users/richard/Sources/GitHub/smartesp/scripts/build_wasm_apps.sh): Emscripten app build and Watch recovery header generation.
-- [`scripts/watch_ui_serial.py`](/Users/richard/Sources/GitHub/smartesp/scripts/watch_ui_serial.py): real-device pointer/button smoke test and screenshots.
-- [`wasm_apps/clock_demo/clock_demo.c`](/Users/richard/Sources/GitHub/smartesp/wasm_apps/clock_demo/clock_demo.c): C source for the built-in clock demo app compiled to WASM with Emscripten.
-- [`scripts/build_clock_demo_wasm.sh`](/Users/richard/Sources/GitHub/smartesp/scripts/build_clock_demo_wasm.sh): regenerates the embedded clock demo header from the C source.
-- [`scripts/push_wasm_serial.py`](/Users/richard/Sources/GitHub/smartesp/scripts/push_wasm_serial.py): host-side serial uploader for external WASM payloads.
-- [`tests/test_idf_build.sh`](/Users/richard/Sources/GitHub/smartesp/tests/test_idf_build.sh): compile and optional flash/serial smoke validation.
+### Residency is an explicit policy
 
-## Execution Model
+Use `SMART_OS_APP_RESIDENCY_*` descriptors and process snapshots to decide eviction. Do not hide swapping or hibernation in unrelated UI code. Protect the foreground app, pause background Watch ticking, and explicitly unload disposable Settings on exit. Spill/load hooks are scaffold, not a claim of complete restartable process persistence.
 
-There are two deliberate paths:
+### Compatibility survives naming and implementation changes
 
-- Native C path:
-  boot, loading, shared shell, critical touch/display, power/input/notification services
-- WASM path through `fayasm`:
-  restartable apps, hibernable workloads, portable user-facing logic
+Use `smart_os_start()`, `smart_os_*` types/functions, and `SMART_OS_*` constants. Keep Watch's name, installed app IDs/paths, `watch_settings` NVS namespace, `/sdcard/smartesp/runtime/`, and the `WATCH-UI` protocol stable. Do not rename legacy storage simply to match SmartOS branding.
 
-Keep that separation visible in code and documentation.
+## Critical Implementation Contracts
 
-## Display Rules
+- **Display transfer lifetime:** [smart_os_board.c](components/smart_os/src/board/smart_os_board.c) registers SH8601 with `lvgl_port_add_disp()` as a QSPI/SPI (quad/serial peripheral interface) panel. Do not use the BSP (board support package) red/green/blue (RGB) registration path: buffers can be reused before color transfers complete. `round_sh8601_area()` keeps starts and exclusive ends even. `smart_os_board_present_first_frame()` refreshes before enabling the AMOLED. [Hardware smoke](tests/test_launcher_hardware.sh) captures the render tree; inspect the physical panel for transfer artifacts too.
+- **Stacks and panel geometry:** Keep `CONFIG_ESP_MAIN_TASK_STACK_SIZE >= 8192` in [sdkconfig](sdkconfig) and [sdkconfig.defaults](sdkconfig.defaults) while `app_main()` initializes display/touch synchronously. Keep user content within y=58…442 and dynamically inset text bands near rounded corners using [native_ui.c](components/smart_os/src/ui/native_ui.c). Preserve the serial task's 12 KiB minimum and snapshot streaming yields in [serial_uploader.c](components/smart_os/src/io/serial_uploader.c)/[app_menu.c](components/smart_os/src/ui/app_menu.c); build and hardware smoke are the available checks.
+- **UI/runtime serialization:** LVGL callbacks enqueue `smart_os_ui_action_t` only. After boot, `maintenance_task()` in [smart_os.c](components/smart_os/src/smart_os.c) owns navigation and runtime calls; do not execute WASM, SD, or NVS operations inside callbacks. Serial diagnostics may inject pointer events or take a locked snapshot on their own task. Tick/render Watch only while `SMART_OS_VIEW_WATCH` is visible. [Hardware smoke](scripts/watch_ui_serial.py) checks navigation survives Watch ticks.
+- **Physical buttons:** [smart_os_board.c](components/smart_os/src/board/smart_os_board.c) uses BOOT=GPIO0 (general-purpose input/output pin 0) active low with 40 ms debounce. PWR uses TCA9554 EXIO6 active high at I2C (inter-integrated circuit) address `0x20`; older boards fall back to AXP2101 at `0x34`, enabling short-press bit 3 at `0x41` and acknowledging only that bit at `0x49`. Do not configure GPIO35 (octal PSRAM, pseudo-static RAM) or disable PMIC (power-management IC) long-press shutdown. Physical wiring is not tested by serial injection.
+- **App results and loading:** [app_catalog.c](components/smart_os/src/apps/app_catalog.c) is the descriptor registry; only Watch (`wasm.demo.clock`) and Settings (`wasm.settings`) appear in Apps. Preserve internal Demo Add and Workout stub entries. [wasm_runtime.c](components/smart_os/src/runtime/wasm_runtime.c) prefers installed Secure Digital (SD) card modules; Watch alone has a missing-file recovery copy among user apps. Existing invalid installed files MUST show errors, not use recovery. Reset after replacing a cached Watch context. [Node tests](tests/test_wasm_apps.mjs) cover app arithmetic; [hardware smoke](tests/test_launcher_hardware.sh) covers Settings SD loading, not corrupt-module fallback.
+- **Settings authority:** `run_settings()` validates returned brightness in 20–100%, applies it through locked `smart_os_board_set_brightness()`, then persists `watch_settings/brightness`; default is 80%. Settings WASM computes ±20 using `host_app_action` (-1/0/1) and `host_app_value`. Keep validation native even though [settings.c](wasm_apps/settings/settings.c) clamps values. [Node tests](tests/test_wasm_apps.mjs) exercise bounds; [hardware smoke](tests/test_launcher_hardware.sh) changes/restores brightness, without reboot persistence coverage.
+- **Residency victims:** [process_manager.c](components/smart_os/src/kernel/process_manager.c) excludes foreground, native, nonresident, always-resident and resident-while-active entries. `handle_memory_pressure()` in [smart_os.c](components/smart_os/src/smart_os.c) hibernates eligible workloads or unloads disposable ones. Update enum docs, process manager, README, and this handbook together when policy changes. No dedicated SmartOS victim-selection test exists.
+- **SD mount and destructive recovery:** `mount_sdcard()` in [storage.c](components/smart_os/src/storage/storage.c) mounts directly, using BSP pins/global `bsp_sdcard`, one-bit SDMMC (SD memory-card controller), `SDMMC_SLOT_FLAG_INTERNAL_PULLUP`, and probing-clock retry. Do not revert to `bsp_sdcard_mount()`. FAT (File Allocation Table) is the default filesystem; ESP-IDF may repartition/format initialized cards on `FR_NO_FILESYSTEM` or `FR_INT_ERR`. This destroys existing contents; transport/enumeration errors MUST NOT trigger formatting. No automated destructive-recovery test exists.
+- **Serial framing:** Keep native Universal Serial Bus (USB) Serial/JTAG (Joint Test Action Group) as the primary console (`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG`), install the buffered driver before serial I/O, assemble complete lines across USB packets, and discard overlong lines through newline. An output-only secondary console cannot accept uploads. [serial_uploader.c](components/smart_os/src/io/serial_uploader.c) limits lines to its 384-byte buffer and DATA to 96 decoded bytes; [push_wasm_serial.py](scripts/push_wasm_serial.py) mirrors the chunk limit. Malformed protocol paths lack automated host tests.
 
-- Keep the SH8601 registered with `lvgl_port_add_disp()` as a QSPI/SPI display. Do not switch back to the Waveshare BSP's RGB registration path: it can release LVGL draw buffers before SPI color transfers complete and produce corrupted horizontal bands.
-- Keep SH8601 invalidation coordinates rounded to even starts and even exclusive ends.
-- Keep the AMOLED dark until the first full LVGL frame has been synchronously presented.
-- Keep `CONFIG_ESP_MAIN_TASK_STACK_SIZE` at least 8192 bytes while display and touch initialization run synchronously from `app_main`; the ESP-IDF default overflows during this boot path.
-- Place user-facing content inside the rounded panel's vertical safe region (currently y=58 through y=442) and dynamically inset any text bands that approach the curved corners.
+## Architecture and Data/Control Flow
 
-## Launcher and App Rules
+- **Boot:** `app_main()` → NVS initialization → `smart_os_start()` → board/display → native boot progress → SD mount → runtime/catalog/process registration → brightness restoration → Watch (or Apps) → serial and maintenance tasks. SD failure permits embedded Watch recovery; Settings remains unavailable without its installed module.
+- **Interaction:** physical button polling or LVGL event → queued/native action → `maintenance_task()`/`handle_action()` → app runtime → validated result → locked native presentation; Settings also commits NVS. One-second Watch work runs only in Watch view.
+- **Runtime:** catalog descriptor → cached context → installed file or embedded recovery → upstream module parser → host import binding → `fa_Runtime_executeJob()` → i32 result. Contexts match descriptor pointer identity, not a copied ID string.
+- **Memory pressure:** internal/PSRAM free space → process victim policy → explicit hibernate/unload → runtime spill hooks → sanitized local SD blob paths. Just-in-time (JIT) microcode and linear memory use upstream serialization; complete process restart is not implemented.
+- **Install/generation:** app C → Emscripten → ignored WASM files plus tracked Watch header → firmware or serial `.part` upload → final SD `app.wasm` → next cold load. Host CLI (command-line interface) and device communicate over the local USB console; no distribution service participates.
 
-- Keep launcher, input, error presentation and sensitive Settings hardware/NVS operations native. WASM calculates app results; it never calls LVGL directly.
-- Only Watch (`wasm.demo.clock`) and Settings (`wasm.settings`) appear in Apps. Preserve internal Demo Add and Workout stub catalog entries without advertising unimplemented apps.
-- BOOT is GPIO0, active low, with 40 ms debounce. PWR uses TCA9554 EXIO6 (active high, I2C `0x20`) when present; older boards fall back to polling AXP2101 (`0x34`) short-press status at `0x49`, bit 3, enabled through `0x41`. Do not configure GPIO35: it is reserved for octal PSRAM. Leave PMIC long-press shutdown intact.
-- UI callbacks enqueue actions only. The OS maintenance task owns navigation and all runtime calls; never execute WASM or SD/NVS operations inside LVGL event callbacks.
-- Tick/render Watch only while visible; never let a periodic clock update switch away from another screen.
-- Settings `run()` returns brightness from `host_app_action` (-1/0/1) and `host_app_value`; the OS validates 20–100%, applies it under the display lock, and persists NVS `watch_settings/brightness` (default 80%).
-- SD installed modules take precedence. Watch alone has an embedded recovery copy used when its SD file is absent. Settings requires `/sdcard/apps/settings/app.wasm`. Existing installed-but-invalid files must show an error.
-- Keep the serial/diagnostic task stack at least 12 KiB: synchronous LVGL snapshot rendering needs more stack than simple uploads. Yield periodically during full-frame USB streaming to service the idle watchdog.
-- `WATCH-UI BUTTON/TAP/SNAPSHOT` are development serial diagnostics. TAP goes through LVGL pointer hit testing; snapshots use `CONFIG_LV_USE_SNAPSHOT`. They do not verify physical switches or sensor wiring.
+## Linked Source Tree and File Reference
 
-## Residency Policy
+Each subsection is an edit/navigation owner. Header declarations and their implementations remain separate references. Build and hardware checks mentioned below are mapped to exact commands later.
 
-Current policy classes live in [`components/smart_os/include/smart_os_app.h`](/Users/richard/Sources/GitHub/smartesp/components/smart_os/include/smart_os_app.h):
+### [main/main.c](main/main.c)
 
-- `SMART_OS_APP_RESIDENCY_ALWAYS_RESIDENT`
-- `SMART_OS_APP_RESIDENCY_RESIDENT_WHILE_ACTIVE`
-- `SMART_OS_APP_RESIDENCY_HIBERNABLE`
-- `SMART_OS_APP_RESIDENCY_DISPOSABLE`
+`app_main()` initializes NVS, erases/retries only on `ESP_ERR_NVS_NO_FREE_PAGES` or `ESP_ERR_NVS_NEW_VERSION_FOUND`, then starts SmartOS with defaults from [smart_os.h](components/smart_os/include/smart_os.h). Keep startup here, OS policy in [smart_os.c](components/smart_os/src/smart_os.c). NVS recovery erases preferences; do not treat it as a harmless read. Check: firmware build/boot smoke.
 
-Foreground processes are excluded from memory-pressure victims. Background Watch is hibernable and pauses ticking; Settings is explicitly unloaded on exit as disposable.
+### [components/smart_os/include/smart_os.h](components/smart_os/include/smart_os.h)
 
-When changing policy behavior:
+Public startup contract: `smart_os_config_t` chooses SD preference, auto-launch, and RAM floors; `SMART_OS_DEFAULT_CONFIG()` enables SD/Watch and sets internal/PSRAM floors to 96/512 KiB; `smart_os_start()` starts the singleton OS. Consumed by [main.c](main/main.c), implemented in [smart_os.c](components/smart_os/src/smart_os.c). Do not confuse catalog budgets with enforced allocation limits. Check: firmware build.
 
-- update the enum docs
-- update the process manager
-- update `README.md`
-- update this file
+### [components/smart_os/include/smart_os_app.h](components/smart_os/include/smart_os_app.h)
 
-## Storage Rules
+`smart_os_app_kind_t` separates native/WASM; `smart_os_app_residency_t` defines the four explicit `SMART_OS_APP_RESIDENCY_ALWAYS_RESIDENT`, `RESIDENT_WHILE_ACTIVE`, `HIBERNABLE`, and `DISPOSABLE` policies. `smart_os_app_descriptor_t` carries identity, budget, autostart, entry export, storage path and embedded bytes. [Catalog](components/smart_os/src/apps/app_catalog.c), [policy](components/smart_os/src/kernel/process_manager.c) and [runtime](components/smart_os/src/runtime/wasm_runtime.c) consume it. Foreground protection overrides eviction class; enum changes require policy/docs changes. Check: firmware build; direct policy test gap.
 
-- SmartOS mounts `/sdcard` directly in `storage.c` (not via `bsp_sdcard_mount()`) when SD-backed runtime is enabled, because the 2.06" board needs `SDMMC_SLOT_FLAG_INTERNAL_PULLUP` and a probing-clock retry that the BSP helper does not enable. It still reuses the BSP pin macros (`BSP_SD_CLK/CMD/D0`) and the global `bsp_sdcard` handle.
-- Runtime spill blobs go under `/sdcard/smartesp/runtime/`.
-- External WASM apps should converge on `/sdcard/apps/<app>/app.wasm`.
-- FAT-formatted cards are the safe default. When a card initializes but FatFs reports no usable filesystem or an inconsistent filesystem, boot-time mounting automatically repartitions and formats it as FAT; this is destructive to the card's existing contents. Transport/enumeration failures never trigger formatting.
-- Keep native USB Serial/JTAG as the primary console (`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG`); the output-only secondary console cannot accept uploads. Install the buffered USB driver before starting serial I/O and assemble complete lines across USB packets.
-- During early development, external WASM payloads are transferred over USB serial with `./scripts/push_wasm_serial.py`, which speaks the device-side `WASM-UPLOAD` stdio protocol.
-- Built-in Emscripten-generated WASM headers should be regenerated from `wasm_apps/` sources before firmware builds when those sources change.
-- If you add manifests, document the schema in `README.md` and link it here.
+### [components/smart_os/include/smart_os_process.h](components/smart_os/include/smart_os_process.h)
 
-## `fayasm` Rules
+`smart_os_process_state_t` describes STOPPED/READY/RUNNING/HIBERNATED/FAULTED; `smart_os_process_snapshot_t` carries residency, foreground, last result/status and transition time. Label functions live in [process_manager.c](components/smart_os/src/kernel/process_manager.c). These are supervision records, not separate FreeRTOS app tasks. Check: firmware build; state-transition unit coverage is absent.
 
-- Prefer integration changes in `smartesp` before changing upstream `fayasm`.
-- If upstream changes are necessary, make them inside the submodule and commit there directly.
-- After any upstream runtime behavior change, sync:
-  - `external/fayasm/README.md`
-  - `external/fayasm/AGENTS.md`
-  - the submodule pointer in this repository
+### [components/smart_os/src/smart_os.c](components/smart_os/src/smart_os.c)
 
-## When Starting New Work
+Owns `smart_os_state_t`, `smart_os_view_t` and the OS lifecycle. `smart_os_start()` orders boot; `seed_wall_clock_from_build()` seeds an unset clock; `prepare_external_app_storage()` prepares catalog directories. `request_action()` enqueues; `maintenance_task()` handles actions, buttons, visible Watch ticks and pressure. `handle_action()`/`open_watch()`/`run_settings()`/`close_settings()` own navigation and disposable teardown; `set_foreground()` protects the active app. `tick_clock_demo_if_due()`, `format_clock_result()` and `update_clock_ui()` validate/format Watch results. `read_brightness()`/`persist_brightness()` own NVS; `handle_memory_pressure()` executes policy from [process_manager.c](components/smart_os/src/kernel/process_manager.c). Depends on board, native UI, runtime, storage and catalog. Do not move these runtime/NVS calls into UI callbacks or allow ticks to navigate from another view. Checks: firmware boot and launcher smoke; no fault-injection/persistence suite.
 
-- Read this file first.
-- Read `README.md` second.
-- Check whether the requested change belongs in native UI, process policy, storage, or `fayasm` runtime glue before editing.
-- Preserve the distinction between board bootstrap and OS logic.
-- Preserve the distinction between runtime policy and UI presentation.
+### [components/smart_os/src/board/smart_os_board.h](components/smart_os/src/board/smart_os_board.h)
+
+Declares board init, lock/unlock, display access, first-frame presentation, button polling and brightness APIs implemented in [smart_os_board.c](components/smart_os/src/board/smart_os_board.c). OS/UI callers use these instead of taking over BSP ownership. Keep hardware exposure separate from app policy. Check: firmware build.
+
+### [components/smart_os/src/board/smart_os_board.c](components/smart_os/src/board/smart_os_board.c)
+
+`smart_os_board_init()` creates panel/LVGL/touch and calls `init_buttons()`; `round_sh8601_area()` enforces transfer alignment; `smart_os_board_present_first_frame()` enables the panel only after refresh. `smart_os_board_poll_button()` debounces GPIO/expander input and acknowledges PMIC events before dispatch; failed expander reads must not synthesize release/press pairs. `smart_os_board_set_brightness()` bounds/checks and locks hardware access; lock wrappers mediate UI callers. Depends on managed Waveshare/LVGL drivers. Preserve SPI registration, first-frame ordering, GPIO35 reservation and PMIC bits. Checks: firmware and hardware smoke plus physical observation; injected taps/buttons do not cover wiring.
+
+### [components/smart_os/src/ui/native_ui.h](components/smart_os/src/ui/native_ui.h)
+
+`smart_os_ui_clock_model_t` carries formatted text; `smart_os_ui_action_t`/`smart_os_ui_action_handler_t` carry queued intent. Declares screen, injection and snapshot APIs shared by [native_ui.c](components/smart_os/src/ui/native_ui.c), [app_menu.c](components/smart_os/src/ui/app_menu.c), OS and serial code. It is not a WASM graphics ABI (application binary interface). Check: firmware/launcher smoke.
+
+### [components/smart_os/src/ui/native_ui.c](components/smart_os/src/ui/native_ui.c)
+
+Owns native boot/Watch widgets: `ensure_boot_screen()`/`ensure_clock_screen()` lazily create them; `safe_zone_for_band()` and `corner_inset_for_edge_distance()` calculate curved-edge insets; layout functions position content. `smart_os_native_ui_show_boot()` locks, renders, and presents the first frame; `smart_os_native_ui_show_clock()` updates validated model text. `open_apps()` sends an action to [app_menu.c](components/smart_os/src/ui/app_menu.c). Do not put runtime work in that callback or remove safe-region layout. Checks: firmware boot markers and device captures; screenshots require visual review.
+
+### [components/smart_os/src/ui/app_menu.c](components/smart_os/src/ui/app_menu.c)
+
+Owns Apps, Settings and error screens, action dispatch and diagnostics. `smart_os_native_ui_set_action_handler()`/`smart_os_native_ui_request()` connect callbacks to the OS queue; `clicked()` only dispatches intent. `ensure_apps()` builds the implemented Watch/Settings circles with advanced hit testing; `ensure_settings()` builds brightness/back controls. `smart_os_native_ui_show_apps()`/`smart_os_native_ui_show_settings()`/`smart_os_native_ui_show_app_error()` acquire the board lock. `read_test_pointer()`/`smart_os_native_ui_inject_tap()` use LVGL hit testing; `smart_os_native_ui_snapshot()` captures RGB565 and streams hex rows after unlocking, yielding during transfer. Called by OS and serial handlers; depends on [board](components/smart_os/src/board/smart_os_board.c). Keep decorative children non-intercepting and line geometry alive (static points). Check: [hardware smoke](scripts/watch_ui_serial.py); no physical sensor verification.
+
+### [components/smart_os/src/apps/app_catalog.h](components/smart_os/src/apps/app_catalog.h)
+
+Declares `smart_os_app_catalog_get()` for the static descriptor array in [app_catalog.c](components/smart_os/src/apps/app_catalog.c), consumed at OS startup. Keep registration authority here rather than inventing directory enumeration. Check: firmware build.
+
+### [components/smart_os/src/apps/app_catalog.c](components/smart_os/src/apps/app_catalog.c)
+
+`k_catalog` registers Shell/Input/Notifications descriptors, Watch, Settings, Demo Add and Workout stub; `smart_os_app_catalog_get()` returns it and its size. This is the authoritative app registry, not a promise every descriptor has a running service or visible icon. Depends on generated [Watch bytes](components/smart_os/src/apps/clock_demo_wasm.h) and [Add bytes](components/smart_os/src/apps/sample_add_wasm.h); OS registers it with the process manager. Keep descriptor storage stable for runtime pointer identity; coordinate visible apps separately with `ensure_apps()`. Check: firmware/launcher smoke.
+
+### [components/smart_os/src/apps/clock_demo_wasm.h](components/smart_os/src/apps/clock_demo_wasm.h)
+
+Tracked derived `k_watch_demo_clock_wasm` bytes, included by the catalog for missing-SD Watch recovery. Generated by [build_wasm_apps.sh](scripts/build_wasm_apps.sh) from [clock_demo.c](wasm_apps/clock_demo/clock_demo.c). Never hand-edit; build apps, run [Node tests](tests/test_wasm_apps.mjs), then rebuild firmware. Node tests read build outputs, not this header.
+
+### [components/smart_os/src/apps/sample_add_wasm.h](components/smart_os/src/apps/sample_add_wasm.h)
+
+`k_watch_demo_add_wasm` is the embedded internal `host_add`/`run` fixture consumed by the catalog. No generator is tracked for this small byte fixture. Preserve its import/export contract when editing; do not advertise it as an implemented user app. Check: firmware compilation; no root direct execution test.
+
+### [components/smart_os/src/kernel/process_manager.h](components/smart_os/src/kernel/process_manager.h)
+
+`smart_os_process_manager_t` owns snapshot slots and RAM floors; `SMART_OS_PROCESS_MANAGER_MAX_APPS` bounds registration. Declares catalog registration, state/results, pressure measurement and victim selection implemented in [process_manager.c](components/smart_os/src/kernel/process_manager.c). Callers are the OS, not LVGL callbacks. Check: firmware; dedicated policy coverage absent.
+
+### [components/smart_os/src/kernel/process_manager.c](components/smart_os/src/kernel/process_manager.c)
+
+`smart_os_process_manager_register_catalog()` initializes bounded slots from descriptor autostart/residency; `smart_os_process_manager_mark_state()` stamps transitions and `smart_os_process_manager_set_result()` records execution outcomes. `smart_os_process_manager_memory_pressure()` reads ESP heap capabilities against configured floors; `smart_os_process_manager_pick_victim()` excludes protected entries and compares residency/transition age. Label functions implement public process/residency names. [smart_os.c](components/smart_os/src/smart_os.c) performs actual unload/hibernate. Budgets in descriptors are metadata, not allocator enforcement; do not imply a strict priority order beyond the actual comparator. Check: firmware; eviction unit-test gap.
+
+### [components/smart_os/src/runtime/wasm_runtime.h](components/smart_os/src/runtime/wasm_runtime.h)
+
+`smart_os_wasm_context_t` owns module/runtime/job, input, entry index and result state; `smart_os_wasm_runtime_t` bounds cached contexts with `SMART_OS_WASM_MAX_CONTEXTS`; `smart_os_wasm_result_t` publishes execution status. Declares run/input/hibernate/resume/unload entry points implemented in [wasm_runtime.c](components/smart_os/src/runtime/wasm_runtime.c). Keep context ownership private to native runtime integration; process snapshots are separate policy records. Check: firmware.
+
+### [components/smart_os/src/runtime/wasm_runtime.c](components/smart_os/src/runtime/wasm_runtime.c)
+
+`find_context()`/`get_or_create_context()` match descriptor pointers. `load_module()` chooses SD versus recovery and loads sections; `init_runtime_context()` attaches the module, tunes JIT, binds imports, finds the entry, creates a job, and registers spill/trap hooks. `bind_common_imports()` supplies `host_add`, `host_time_ms`, `host_log_i32`, `host_app_action`, and `host_app_value` with typed host-call checks. `smart_os_wasm_runtime_run_with_input()` resumes, resets the operand stack, executes and publishes an i32 result; `free_context()` destroys job before runtime/module, and `reset_context_slot()` cleans failed loads. `jit_spill()`/`jit_load()` and `memory_spill()`/`memory_load()` serialize via [storage](components/smart_os/src/storage/storage.c); `function_trap()` reloads entry state. Hibernate/resume/unload APIs implement OS policy requests. Do not mask invalid installed modules with recovery. Spill/load status returns are currently discarded by lifecycle wrappers: do not claim failure-safe checkpointing. Checks: firmware and upstream suite; [Node tests](tests/test_wasm_apps.mjs) do not execute fayasm.
+
+### [components/smart_os/src/storage/storage.h](components/smart_os/src/storage/storage.h)
+
+`smart_os_storage_t` records mount availability and runtime/apps roots; APIs construct paths, prepare directories, and read/write blobs. Implemented by [storage.c](components/smart_os/src/storage/storage.c), consumed by runtime and uploader. Availability must gate SD use; `smart_os_storage_root()` returns the runtime directory, not the card mount point. Check: firmware/SD smoke.
+
+### [components/smart_os/src/storage/storage.c](components/smart_os/src/storage/storage.c)
+
+`mount_sdcard()` owns direct mount/retry/destructive FAT recovery configuration. `smart_os_storage_init()` establishes `/sdcard/smartesp/runtime/` and `/sdcard/apps`; missing media degrades without blocking boot. `sanitize_id()` maps non-alphanumeric characters to underscores; `ensure_parent_directories()` prepares catalog/upload directories. `smart_os_storage_make_app_wasm_path()` and `smart_os_storage_make_blob_path()` build app/blob paths; `smart_os_storage_read_blob()` allocates returned buffers and `smart_os_storage_write_blob()` writes bytes. [Runtime](components/smart_os/src/runtime/wasm_runtime.c) and [uploader](components/smart_os/src/io/serial_uploader.c) own payload interpretation. Slug normalization can collapse names; do not assume arbitrary IDs map one-to-one. Checks: firmware/hardware; mount failure and filesystem repair automation absent.
+
+### [components/smart_os/src/io/serial_uploader.h](components/smart_os/src/io/serial_uploader.h)
+
+Declares `smart_os_serial_uploader_start()` with a storage pointer retained by the serial task. [OS startup](components/smart_os/src/smart_os.c) provides long-lived storage. Keep diagnostics enabled even without SD. Check: firmware/serial smoke.
+
+### [components/smart_os/src/io/serial_uploader.c](components/smart_os/src/io/serial_uploader.c)
+
+`smart_os_serial_upload_session_t` tracks one transfer. `begin_upload()` normalizes slug and opens `.part`; `write_chunk()` validates hex/size; `finish_upload()` checks exact byte count then unlinks the destination and renames the temporary file; `clear_session()` cleans state. `handle_line()` is the authoritative `WASM-UPLOAD`/`WATCH-UI` command dispatch; `serial_uploader_task()` assembles lines and discards overflow; `smart_os_serial_uploader_start()` installs buffered USB I/O and allocates the diagnostic stack. Depends on storage/native UI; paired with [host uploader](scripts/push_wasm_serial.py). Do not describe replacement as power-loss-safe or content-validated: the old file is unlinked before rename, and no WASM signature is checked. Checks: hardware install/UI usage; protocol error-path tests absent.
+
+### [components/fayasm_port/include/fayasm_port.h](components/fayasm_port/include/fayasm_port.h)
+
+Declares the integration's `fayasm_port_status_string()` for human-readable runtime errors. [wasm_runtime.c](components/smart_os/src/runtime/wasm_runtime.c) consumes it; upstream execution semantics do not belong here. Check: firmware compilation.
+
+### [components/fayasm_port/src/fayasm_port.c](components/fayasm_port/src/fayasm_port.c)
+
+`fayasm_port_status_string()` translates `FA_RUNTIME_*` statuses, returning `unknown` for unmapped values. Add status labels here when glue logging changes; modify upstream for actual execution behavior. Check: firmware compilation; no isolated mapping test.
+
+### [wasm_apps/clock_demo/clock_demo.c](wasm_apps/clock_demo/clock_demo.c)
+
+`WATCH_WASM_IMPORT` declares imports; `encode_hhmmss()` encodes seconds within a day; exported `run()` reads `host_time_ms()`, logs and returns HHMMSS. [Build script](scripts/build_wasm_apps.sh) produces Watch/compatibility bytes. Native OS owns date/time presentation, never this app. Check: [Node tests](tests/test_wasm_apps.mjs), including day rollover and large timestamps.
+
+### [wasm_apps/settings/settings.c](wasm_apps/settings/settings.c)
+
+Exported `run()` reads host action/value, applies ±20 only for -1/+1 and clamps to 20–100. [smart_os.c](components/smart_os/src/smart_os.c) validates again before hardware/NVS writes. Do not import LVGL or persistence into the app. Check: [Node tests](tests/test_wasm_apps.mjs) include unknown actions and out-of-range input; hardware smoke covers application.
+
+### [wasm_apps/README.md](wasm_apps/README.md)
+
+App-author/operator source for build artifacts, imports/exports and cold-load/recovery behavior. Keep it aligned with both app sources, [build script](scripts/build_wasm_apps.sh), runtime and root README. Check changed commands/links; do not turn recovery into an invalid-file fallback claim.
+
+### [scripts/build_wasm_apps.sh](scripts/build_wasm_apps.sh)
+
+`prepare_emcc_env()` selects Python/LLVM/Binaryen overrides with Homebrew detection; `python_supports_emscripten()` requires Python >=3.10. The app loop builds standalone `run` exports with 128 KiB initial memory and 4 KiB stack, copies `clock_demo.wasm` to `watch.wasm`, and uses `xxd` to generate the tracked recovery header. Inputs are app C; outputs under `wasm_apps/build/` are ignored. `EMCC`, `EMSDK_PYTHON`, `EM_LLVM_ROOT`, and `EM_BINARYEN_ROOT` customize toolchain selection. Do not regenerate with a different pipeline silently. Check: run script then [Node tests](tests/test_wasm_apps.mjs).
+
+### [scripts/build_clock_demo_wasm.sh](scripts/build_clock_demo_wasm.sh)
+
+Compatibility wrapper: `exec` delegates all arguments to [build_wasm_apps.sh](scripts/build_wasm_apps.sh), which rebuilds **both** apps. Do not restore an independent Watch generator. Check: shell syntax; primary app workflow covers the implementation.
+
+### [scripts/push_wasm_serial.py](scripts/push_wasm_serial.py)
+
+`detect_port()` chooses a serial device; `configure_port()` sets POSIX termios; `SerialSession` buffers protocol lines and recovers markers after truncated logs. `main()` validates local file/chunk size, sends PING/BEGIN/DATA/END, and waits for replies. Shared by [watch_ui_serial.py](scripts/watch_ui_serial.py). Uploads mutate SD and take effect on cold load; do not run concurrently with a monitor on the same console. Check: `--help` for CLI and real-device upload; no host parser unit suite.
+
+### [scripts/watch_ui_serial.py](scripts/watch_ui_serial.py)
+
+`lines()` recovers UI markers; `command()`/`expect()` coordinate replies and logs. `snapshot()` validates RGB565 rows and writes PPM (portable pixmap); `smoke()` opens Apps/SD Settings, changes/restores brightness, captures screens and returns to Watch. `main()` dispatches button/tap/snapshot/smoke, using [SerialSession](scripts/push_wasm_serial.py). Require an initially visible Watch and installed Settings. Captured pixels prove LVGL rendering, not physical panel output or switch/sensor wiring. Check: [test_launcher_hardware.sh](tests/test_launcher_hardware.sh).
+
+### [tests/test_wasm_apps.mjs](tests/test_wasm_apps.mjs)
+
+Node `WebAssembly.instantiate` loads built Settings/Watch with mocked imports. Action/brightness loops check policy; timestamp cases check encoding/rollover/i64 import behavior. Depends on freshly built ignored artifacts; it does not test the embedded header, fayasm, display or NVS. Run after app generation.
+
+### [tests/test_launcher_hardware.sh](tests/test_launcher_hardware.sh)
+
+Forwards options to `watch_ui_serial.py … smoke`. Owns the repeatable device launcher check, not flashing or installation. Start after flash/upload/reset to Watch; outputs default to `/tmp/smartesp-ui/`. It mutates brightness/navigation and restores both on successful completion; interruptions may leave state changed. Physical input and reboot persistence remain gaps.
+
+### [tests/test_idf_build.sh](tests/test_idf_build.sh)
+
+`run_in_idf_env()` activates IDF through EIM (Espressif Installation Manager) or `export.sh`; `project_target_matches()` enables incremental reconfigure. Argument parsing controls clean/build/flash/monitor; `smoke-ui` asserts boot/runtime/render markers. Embedded Python resets via esptool and captures raw serial logs without a TTY. Uses `IDF_PATH`, `IDF_ACTIVATE_SCRIPT`, `BUILD_DIR`, `TARGET`, `PORT`, `BAUD`, `MONITOR_SECONDS`, `SCENARIO`; defaults/options live in this script. It runs submodule initialization and may rewrite target config; `--monitor` resets hardware. Do not claim it runs app generation or launcher tests. Check: `--help`, shell syntax, actual build when firmware changes.
+
+### [CMakeLists.txt](CMakeLists.txt)
+
+Root `project(smart_os)` imports ESP-IDF via `IDF_PATH`; artifact names follow this project. Requires CMake >=3.16. Do not rename it to the repository's legacy name. Check: ESP-IDF build.
+
+### [main/CMakeLists.txt](main/CMakeLists.txt)
+
+`idf_component_register()` registers `main.c` and requires `smart_os`. Entry wiring belongs here; add OS sources in the component's build file. Check: ESP-IDF build.
+
+### [components/smart_os/CMakeLists.txt](components/smart_os/CMakeLists.txt)
+
+`SRCS` registers all native OS owners; public/private include lists keep internal interfaces scoped. `REQUIRES`/`PRIV_REQUIRES` bind fayasm, LVGL, BSP, NVS, timers and hardware/storage drivers. Add/remove source and direct dependencies together; do not rely on accidental transitive headers. Check: ESP-IDF build.
+
+### [components/fayasm_port/CMakeLists.txt](components/fayasm_port/CMakeLists.txt)
+
+`FAYASM_ROOT` points at the submodule; the source list compiles runtime/job/opcode/JIT/parser/stream code plus the status adapter. `FAYASM_TARGET_ESP32=1`, `FAYASM_TARGET_RAM_BYTES=532480ULL`, and `FAYASM_TARGET_CPU_COUNT=2U` are compile-time target hints, not dynamic probes; local `-Wno-error` applies to this wrapper component. Check: firmware plus upstream native suite when runtime behavior changes.
+
+### [main/idf_component.yml](main/idf_component.yml)
+
+Declares the managed `waveshare/esp32_s3_touch_amoled_2_06` dependency with `"*"`; resolved versions belong to [dependencies.lock](dependencies.lock). Do not hand-patch ignored managed sources as a durable fix. Check: IDF dependency resolution/build (may contact registry).
+
+### [dependencies.lock](dependencies.lock)
+
+ESP-IDF component-manager generated resolution/hashes for [manifest](main/idf_component.yml), including driver/LVGL dependencies. Regenerate through dependency resolution; review lock changes with manifest/toolchain updates rather than hand-editing hashes. Check: firmware build; `managed_components/` is derived and ignored.
+
+### [sdkconfig.defaults](sdkconfig.defaults)
+
+Tracked board baseline: ESP32-S3, 16 MiB flash, octal PSRAM, performance configuration, main-task stack, LVGL fonts/snapshot and primary USB console. It seeds configuration but does not override an existing [sdkconfig](sdkconfig). Preserve stack/USB/snapshot contracts in both when adjusting defaults. Check: firmware build with intended target.
+
+### [sdkconfig](sdkconfig)
+
+Tracked effective generated Kconfig settings used by current firmware, including `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"`. Change via IDF configuration and review churn; keep maintained baseline rules aligned with [sdkconfig.defaults](sdkconfig.defaults). Do not commit incidental target changes. Check: ESP-IDF build.
+
+### [partitions.csv](partitions.csv)
+
+Flash layout authority: NVS, OTA (over-the-air) metadata, PHY (radio physical-layer) initialization, factory app, FAT `native_assets`, and coredump partitions. Metadata alone does not implement an OTA updater. Partition changes can invalidate retained data and require a documented migration/reflash plan; no migration runner exists. Check: IDF partition/build validation.
+
+### [.gitmodules](.gitmodules)
+
+Declares upstream fayasm path and GitHub URL. Initialization may contact that remote; commit runtime changes in its repository before updating this gitlink. Check: `git submodule status`.
+
+### [.gitignore](.gitignore)
+
+Excludes CMake/IDE output, app build products, managed components and test build directories. Consult `git check-ignore` before adding generated artifacts; not every arbitrary build-directory name is ignored. Keep canonical sources and the generated Watch recovery header tracked. Check: final `git status --short`.
+
+### [assets/](assets/)
+
+The repetitive image leaves [watch.png](assets/watch.png), [apps-menu.png](assets/apps-menu.png) and [settings.png](assets/settings.png) are derived device captures embedded in README. Refresh from hardware-smoke PPMs when visible UI changes; current PNGs predate SmartOS branding. These are evidence assets, not UI implementation. Check: visual review and README rendering; no image comparison runner.
+
+### [external/fayasm/](external/fayasm/)
+
+Separate upstream runtime repository governed by [its AGENTS.md](external/fayasm/AGENTS.md); do not duplicate its detailed source map here. Parser/runtime/spill semantics belong there; ESP-specific orchestration belongs in SmartOS glue. [build.sh](external/fayasm/build.sh) drives native builds/tests, [test/](external/fayasm/test/) owns regressions, and [wasm_samples/build.sh](external/fayasm/wasm_samples/build.sh) generates Emscripten or Rust fixtures. Consult its [ROADMAP](external/fayasm/ROADMAP.md) and [studies](external/fayasm/studies/) before runtime research. Run native suite after modifications; fixtures may skip if no compiler exists, so inspect output.
+
+### [README.md](README.md)
+
+Human/operator documentation owns setup, catalog, screenshots and root future-work priorities. Synchronize changed runtime/workflow facts with this handbook; remove manual test counts instead of maintaining totals. Validate changed commands against scripts and links against tracked paths.
+
+### [LICENSE](LICENSE)
+
+Apache-2.0 licensing authority for the root repository. Preserve required notices and inspect separate upstream/managed dependency licenses for redistribution; do not infer their terms from this file. Check: licensing review when packaging dependencies; no automated license scanner is configured.
+
+## Features and Recurring Development Pitfalls
+
+### Native boot and rounded Watch surface — Shipped
+
+**Behavior/flow:** [main.c](main/main.c) `app_main()` → [smart_os.c](components/smart_os/src/smart_os.c) `smart_os_start()` → [board](components/smart_os/src/board/smart_os_board.c) initialization → [native UI](components/smart_os/src/ui/native_ui.c) boot progress/Watch. An unset wall clock is seeded from firmware build time, not synchronized with a network. **Constraints:** locked rendering, aligned SPI transfers, first-frame blanking and safe region. **Tests/gaps:** [boot smoke](tests/test_idf_build.sh) checks milestones; [launcher smoke](tests/test_launcher_hardware.sh) captures screens; no automated physical-panel artifact check or time synchronization.
+
+### Apps navigation and disposable Settings — Shipped
+
+**Behavior/flow:** [app_menu.c](components/smart_os/src/ui/app_menu.c) `clicked()`/Watch card or [board](components/smart_os/src/board/smart_os_board.c) button → [OS](components/smart_os/src/smart_os.c) `handle_action()` → runtime → native screen. Side button opens Apps from Watch, returns from Apps to Watch, and leaves Settings for Apps. **Constraints:** only Watch/Settings visible; Watch pauses offscreen; Settings unloads on exit. **Tests/gaps:** [hardware smoke](scripts/watch_ui_serial.py) covers pointer hit testing/navigation and Settings SD loads; physical switches and missing/corrupt modules lack automated coverage.
+
+### Brightness policy and persistence — Shipped
+
+**Behavior/flow:** Settings controls → [OS](components/smart_os/src/smart_os.c) `run_settings()` → [WASM run](wasm_apps/settings/settings.c) → native range validation → [board brightness](components/smart_os/src/board/smart_os_board.c) → NVS commit. **Constraints:** 20–100%, default 80%, legacy namespace stable; only native code touches hardware/storage. **Tests/gaps:** [Node](tests/test_wasm_apps.mjs) bounds and unknown actions; [hardware smoke](tests/test_launcher_hardware.sh) application/restoration. Reboot persistence and NVS error paths remain untested.
+
+### Local app installation and Watch recovery — Shipped
+
+**Behavior/flow:** [Emscripten build](scripts/build_wasm_apps.sh) → [host uploader](scripts/push_wasm_serial.py) → [serial handler](components/smart_os/src/io/serial_uploader.c) `.part` → final SD file → [runtime](components/smart_os/src/runtime/wasm_runtime.c) `load_module()`. **Constraints:** missing Watch SD file permits embedded recovery; invalid installed files error; Settings requires SD; upload does not invalidate cached Watch. **Tests/gaps:** app build/Node and real upload/launcher smoke; no automated malformed-transfer, power-loss or corrupt-module suite. Upload is unauthenticated development access.
+
+### SD-backed residency hooks — Experimental/scaffold
+
+**Behavior/flow:** [process manager](components/smart_os/src/kernel/process_manager.c) pressure/victim selection → [OS](components/smart_os/src/smart_os.c) `handle_memory_pressure()` → [runtime](components/smart_os/src/runtime/wasm_runtime.c) hibernate/resume/spill hooks → [storage](components/smart_os/src/storage/storage.c). **Constraints:** foreground protected; native/always/active classes excluded; SD required for hibernation. **Tests/gaps:** [upstream tests](external/fayasm/test/) cover runtime serialization/cycles; no SmartOS end-to-end pressure test. Lifecycle wrappers ignore spill/load failures and do not implement full restart across boots.
+
+### Horizontal bands or clipped corner text — fixed regression risk
+
+**Symptom/cause:** purple bands follow draw-buffer reuse through an RGB registration path; clipped glyphs follow rectangular assumptions on a rounded panel. **Risk owners:** [board](components/smart_os/src/board/smart_os_board.c) `smart_os_board_init()`/`round_sh8601_area()` and [native UI](components/smart_os/src/ui/native_ui.c) safe-band/layout functions. **Prevention/check:** preserve SPI completion semantics, even alignment, first-frame blanking and safe geometry; build, run [hardware smoke](tests/test_launcher_hardware.sh), inspect captures and the actual panel. Snapshot pixels alone cannot prove transfer correctness.
+
+### UI freezes or unexpected return to Watch — fixed regression risk
+
+**Symptom/cause:** running runtime/storage work in LVGL callbacks blocks shared UI; unconditional ticks reload Watch while another screen is open. **Risk owners:** [OS](components/smart_os/src/smart_os.c) `maintenance_task()` and [app menu](components/smart_os/src/ui/app_menu.c) `clicked()`. **Prevention/check:** callbacks enqueue only, maintenance owns runtime/navigation, ticks require Watch view. [Launcher smoke](scripts/watch_ui_serial.py) stays in Apps through a full snapshot before opening Settings.
+
+### USB accepts logs but not commands; snapshot crashes — fixed regression risk
+
+**Symptom/cause:** USB as secondary output cannot receive; packet-based parsing loses split commands; truncated buffered logs hide markers; insufficient serial stack or continuous streaming causes crash/watchdog resets. **Risk owners:** [sdkconfig.defaults](sdkconfig.defaults), [serial_uploader.c](components/smart_os/src/io/serial_uploader.c), [app_menu.c](components/smart_os/src/ui/app_menu.c), and both [host parsers](scripts/push_wasm_serial.py). **Prevention/check:** keep buffered primary USB, line accumulation/overflow discard, marker recovery, >=12 KiB stack and streaming yields. Validate real upload plus [snapshot smoke](tests/test_launcher_hardware.sh); malformed framing has no unit coverage.
+
+### SD enumeration failure mistaken for filesystem damage — fixed regression risk
+
+**Symptom/cause:** missing CMD/D0 pull-ups prevent card enumeration, which formatting cannot fix. **Risk owner:** [storage.c](components/smart_os/src/storage/storage.c) `mount_sdcard()`. **Prevention/check:** preserve internal pull-ups/probing retry and only initialized-card FAT repair semantics. Use serial boot logs on hardware; destructive recovery fault testing is a known gap. Missing SD is a deliberate degraded mode, not a reason to block Watch recovery.
+
+### Successful hibernation flag mistaken for durable checkpoint — active known gap
+
+**Symptom/cause:** [runtime](components/smart_os/src/runtime/wasm_runtime.c) `smart_os_wasm_runtime_hibernate()`/`smart_os_wasm_runtime_resume()`/`function_trap()` discard upstream spill/load statuses while changing flags. **Safe boundary:** treat hooks as scaffold; do not claim successful durable restore or add dependent process guarantees. **Check:** upstream serialization tests cover the serializer, not these wrappers; add SmartOS failure-injection and pressure-cycle coverage when hardening them. Also tracked under Known Gaps and README future work.
+
+## Interface Ownership Map
+
+| Surface | Authoritative owner / handler |
+| --- | --- |
+| Startup/configuration API | [smart_os.h](components/smart_os/include/smart_os.h) → `smart_os_start()` in [smart_os.c](components/smart_os/src/smart_os.c) |
+| App descriptor registry, IDs/SD paths | [app_catalog.c](components/smart_os/src/apps/app_catalog.c) `k_catalog`; public types in [smart_os_app.h](components/smart_os/include/smart_os_app.h) |
+| WASM `run() -> i32`; `env.host_add`, `host_time_ms`, `host_log_i32`, `host_app_action`, `host_app_value` | [wasm_runtime.c](components/smart_os/src/runtime/wasm_runtime.c) `bind_common_imports()`; app-specific signatures in [app docs](wasm_apps/README.md) |
+| Boot/Watch screens and Your Apps card | [native_ui.c](components/smart_os/src/ui/native_ui.c), `smart_os_native_ui_show_boot()`/`smart_os_native_ui_show_clock()` |
+| Apps, Settings, errors and LVGL test pointer | [app_menu.c](components/smart_os/src/ui/app_menu.c); screen transitions owned by [smart_os.c](components/smart_os/src/smart_os.c) `handle_action()` |
+| SH8601, FT5x06 touch, GPIO0/PWR, brightness | [smart_os_board.c](components/smart_os/src/board/smart_os_board.c); managed BSP pin/driver definitions |
+| SD mount, runtime blob/app path construction | [storage.c](components/smart_os/src/storage/storage.c); runtime serializers belong to [fayasm](external/fayasm/AGENTS.md) |
+| `WASM-UPLOAD PING/HELP/BEGIN/DATA/END/ABORT` and replies | [serial_uploader.c](components/smart_os/src/io/serial_uploader.c) `handle_line()`; host [push_wasm_serial.py](scripts/push_wasm_serial.py) |
+| `WATCH-UI BUTTON/TAP/SNAPSHOT`, `OK/ERROR`, `FRAME/PIXELS/FRAME-END` | [serial_uploader.c](components/smart_os/src/io/serial_uploader.c) dispatch; [app_menu.c](components/smart_os/src/ui/app_menu.c) codec; [watch_ui_serial.py](scripts/watch_ui_serial.py) decoder |
+| Build/upload/diagnostic CLI flags | Respective [build runner](tests/test_idf_build.sh), [upload](scripts/push_wasm_serial.py), [UI tool](scripts/watch_ui_serial.py) argument parsers; no HTTP routes, external-service APIs or plugin hooks exist |
+
+## Build, Run, Test, Debug, and Release Checklist
+
+Run from the repository root unless a subshell explicitly changes it. The reference target is `esp32s3` on Waveshare ESP32-S3 Touch AMOLED 2.06, with ESP-IDF 6.1 per README. Host serial tooling uses POSIX Python `termios`/`select` (macOS local workflow); Windows compatibility is not established. Require Git, CMake >=3.16, ESP-IDF tools, Bash/Python, Node for app tests, and Emscripten plus `xxd` for app generation. The build script selects Python >=3.10 for Emscripten. No external-service credentials are needed for the documented local workflow.
+
+Bootstrap may contact GitHub/component registries and writes submodule/managed dependencies; app generation rewrites ignored outputs and the tracked recovery header:
+
+```sh
+git submodule update --init --recursive
+./scripts/build_wasm_apps.sh
+node tests/test_wasm_apps.mjs
+```
+
+Activate the installed IDF environment (the maintained local activator/default path is in [test_idf_build.sh](tests/test_idf_build.sh)); direct build commands from README are:
+
+```sh
+source /Users/richard/.espressif/tools/activate_idf_v6.1.sh
+idf.py set-target esp32s3
+idf.py build
+idf.py flash monitor
+```
+
+`set-target` rewrites configuration/build state; build may resolve network dependencies. Flash requires hardware and rewrites device firmware. Primary validation and incremental rerun (incremental only when the target is unchanged):
+
+```sh
+./tests/test_idf_build.sh
+./tests/test_idf_build.sh --no-clean
+```
+
+The runner initializes submodules and defaults to a clean target/build pass. Customize `IDF_PATH` or `--idf-path`, `IDF_ACTIVATE_SCRIPT`, `BUILD_DIR`/`--build-dir`, `TARGET`/`--target`; inspect `--help` for port/baud/monitor/scenario options. `--monitor` always resets the board and captures raw serial; it does not require a terminal UI. Compile+flash+boot smoke, using an example device path that must match the connected board:
+
+```sh
+./tests/test_idf_build.sh --no-clean --flash --monitor --port /dev/cu.usbmodem101
+```
+
+Install both apps (SD writes); then reset the board to discard cached Watch code before launcher validation. Close other serial monitors first:
+
+```sh
+./scripts/push_wasm_serial.py --port /dev/cu.usbmodem101 --app watch wasm_apps/build/watch.wasm
+./scripts/push_wasm_serial.py --port /dev/cu.usbmodem101 --app settings wasm_apps/build/settings.wasm
+./tests/test_launcher_hardware.sh --port /dev/cu.usbmodem101
+```
+
+Launcher smoke changes navigation/brightness, restores them on success, and writes PPM captures to `/tmp/smartesp-ui/`. Native diagnostics work even without SD:
+
+```sh
+python3 scripts/watch_ui_serial.py --port /dev/cu.usbmodem101 button
+python3 scripts/watch_ui_serial.py --port /dev/cu.usbmodem101 tap 292 299
+python3 scripts/watch_ui_serial.py --port /dev/cu.usbmodem101 --output /tmp/apps.ppm snapshot
+```
+
+After upstream runtime edits, run its native suite; fixture builders prefer Emscripten and fall back to Rust. Fixture/toolchain changes require both paths (the final command deliberately disables Emscripten discovery and requires the `wasm32-unknown-unknown` Rust target):
+
+```sh
+(cd external/fayasm && ./build.sh)
+(cd external/fayasm && ./wasm_samples/build.sh && ./build/bin/fayasm_test_main)
+(cd external/fayasm && EMCC=/nonexistent/emcc ./wasm_samples/build.sh && ./build/bin/fayasm_test_main)
+```
+
+Inspect fixture output/skips rather than inferring coverage from a passing harness. Native/upstream builds write local build/fixture products. There is no root CI, formatter/linter/typechecker, security scanner, benchmark runner, migration tool, release automation, signing workflow or OTA updater. Firmware packaging is the IDF build (`smart_os.bin`/`smart_os.elf`); flashing is the documented deployment path. Upstream owns its benchmark/research workflow.
+
+Documentation-only checks: validate local Markdown links (including tracking/submodule scope), run `git diff --check`, inspect the full diff and status, and exercise changed CLI help/shell syntax. There is no repository documentation linter; do not invent one.
+
+## Test Ownership Map
+
+| Contract/subsystem | Focused check and limitations |
+| --- | --- |
+| Firmware dependencies, source registration, target/config | [test_idf_build.sh](tests/test_idf_build.sh): clean/incremental IDF builds; no app generation |
+| Boot and Watch/runtime presentation | Same runner with `--flash --monitor`; `smoke-ui` asserts display-ready, launching-clock, WASM time, render and started markers; logs do not prove physical rendering |
+| Compiled app policy/encoding | [test_wasm_apps.mjs](tests/test_wasm_apps.mjs): generated Watch/Settings, mocked imports; uses Node's engine, not fayasm |
+| Launcher, LVGL hit regions, SD Settings, brightness | [test_launcher_hardware.sh](tests/test_launcher_hardware.sh) → [watch_ui_serial.py](scripts/watch_ui_serial.py), shared [SerialSession](scripts/push_wasm_serial.py); requires firmware/apps/reset; no physical actuation or reboot persistence |
+| Runtime opcode/call/JIT/spill semantics | [upstream tests](external/fayasm/test/) and [fixture builder](external/fayasm/wasm_samples/build.sh): native suite, integer/nested-call and stats fixtures, serialization cycles; root wrapper failures not covered |
+| Source-to-embedded recovery generation | [build_wasm_apps.sh](scripts/build_wasm_apps.sh), app tests then firmware build; no automated byte-for-byte header equivalence assertion |
+| Policy/SD/serial/persistence error paths | Known gaps: no SmartOS unit/fault-injection suite for victims, corrupt installed modules, mount/format errors, malformed upload framing, replacement power loss, NVS errors or reboot restore |
+
+## Data, Security, Privacy, and Compatibility Boundaries
+
+- Canonical inputs are tracked C/build/config files and the upstream gitlink. Watch recovery bytes and dependency lock/effective Kconfig are tracked derived artifacts with generators described above; `wasm_apps/build/`, `managed_components/`, and test build directories are ignored products. Runtime SD/NVS data is device-local and MUST NOT be committed or treated as source.
+- Keep `/sdcard/apps/watch/app.wasm`, `/sdcard/apps/settings/app.wasm`, internal IDs and `/sdcard/smartesp/runtime/` compatible. Keep NVS `watch_settings/brightness`; namespace/type/layout changes need a migration/rollback plan and restart tests. No general migration or backup/restore tool exists; preserve copies of needed SD payloads/data before destructive recovery or replacement.
+- Firmware startup can erase NVS for incompatible/full-page recovery; SD mount can repartition/format initialized cards for recoverable FAT errors. Do not remove these facts from operator docs or expand recovery to transport failures. Partition changes may invalidate existing data.
+- USB install/diagnostics are unauthenticated development interfaces with local device authority. Upload checks framing/chunk/declared length and normalized slug paths, but does not verify module signatures or authenticate senders. No maximum total app size or enforced per-app allocator budget is implemented here. Do not claim hostile-app isolation or production signing.
+- Native host imports expose a small explicit ABI; validate types and app results at that boundary. Do not expose hardware, LVGL pointers, NVS, secrets or arbitrary filesystem access through new imports without a documented contract and focused tests. Module parsing runs native upstream code and is not proof of a complete security validator.
+- Use upstream versioned JIT/memory serializers, never persist raw function pointers. Existing hooks are partial checkpointing; tables/globals/full process restart and error propagation are gaps. Treat spill files as derived runtime state, not a portable user backup format promised by SmartOS.
+- No network replication, public data upload, telemetry or credential store is implemented in these flows. Do not add real secrets/personal data to examples, fixtures, logs or screenshots. Compatibility changes require explicit docs/test updates; no formal deprecation schedule exists.
+
+## Current Status, Known Gaps, and Roadmap Snapshot
+
+### Shipped
+
+Implemented current paths: native boot/Watch/Apps/Settings/error presentation, board input/display glue, visible-only Watch execution, SD app precedence/missing-Watch recovery, local serial installation/diagnostics, brightness validation/NVS storage, and foreground eviction protection. Tests and their limits are mapped above; this label does not imply every path was hardware-retested during a documentation update.
+
+### Experimental/scaffold
+
+Process snapshots, resource-floor eviction and SD spill/load integration exist, but app execution is synchronous on the maintenance task. Native catalog entries such as Notifications are descriptors, not completed independent services. Workout remains an internal placeholder; Demo Add remains a runtime fixture.
+
+### Known Gaps
+
+- Hibernate/resume/trap wrappers discard upstream spill/load failures and update state flags; complete failure-safe checkpoints, all-memory/table/global persistence and restart across boots are not guaranteed. See [runtime owner](components/smart_os/src/runtime/wasm_runtime.c) and the recurring pitfall above.
+- No SmartOS memory-pressure/fault-injection, reboot brightness persistence, physical input automation, corrupt-module or malformed-upload regression suite exists. Existing upstream tests do not close these integration gaps.
+- Serial install is unsigned/unauthenticated and replacement unlinks the old file before rename; power-loss rollback and module trust are not solved. App RAM budgets are not enforced.
+- No manifest-based discovery/distribution, OTA updater, or network time synchronization exists. README screenshots predate SmartOS branding; refresh them with the next captured UI update.
+
+### Planned
+
+The authoritative root backlog is [README — Notes for Future Work](README.md#notes-for-future-work): add external-app manifests, evolve synchronous orchestration into long-lived supervision, and harden residency integration with focused failure checks. Document any future manifest schema in README and link it here. Follow the [upstream ROADMAP](external/fayasm/ROADMAP.md) for runtime work; do not import its plans as implemented OS features.
+
+## Task Start and Handoff Checklist
+
+1. Read every applicable AGENTS.md completely and README next; inspect branch/status/submodules and preserve unrelated changes.
+2. Identify the source-file owner, meaningful symbols, public interface, feature path and focused checks; inspect current code before trusting handbook prose.
+3. Check principles, dangerous exceptions, data/trust/compatibility boundaries, scoped upstream rules and recurring pitfalls before changing behavior.
+4. Update changed/discovered durable facts in the same edit batch: file/symbol maps, contracts, feature status, test gaps, README/backlog and any governed upstream docs. Remove stale instructions; do not add chronological notes.
+5. Run relevant focused validation, verify touched links/commands/tracking, inspect full diff and `git diff --check`; before a commit, ensure the handbook describes that exact resulting revision and stage it with the change.
+6. Hand off outcome, checks run, checks omitted with reasons, and remaining gaps. State explicitly when an ESP-IDF build or hardware validation could not run; never infer device or runtime coverage from Node tests or screenshots alone.

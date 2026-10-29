@@ -31,7 +31,7 @@ This repository now contains a buildable ESP-IDF project skeleton with:
 - a process manager that marks apps as `always resident`, `resident while active`, `hibernable`, or `disposable`
 - a native circular app launcher opened with either side button, with tappable Watch and Settings icons
 - SD-loaded Watch and Settings WASM apps executed through `fayasm`, with native LVGL presentation and persistent display brightness
-- an updated `fayasm` runtime that preserves caller operands across nested WASM calls and avoids repeated JIT preparation for large function bodies, with 113 native tests and matching Emscripten/Rust fixture validation
+- an updated `fayasm` runtime that preserves caller operands across nested WASM calls and avoids repeated JIT preparation for large function bodies, with native regression tests and matching Emscripten/Rust fixture validation
 
 ## Repository Layout
 
@@ -190,7 +190,7 @@ cd external/fayasm
 ./build.sh
 ```
 
-The current suite contains 113 tests. Its `integer_ops` real-toolchain fixture covers signed division/remainder, i32/i64 rotate and bit-count operations, typed i64 calls, and nested-call operand preservation under both Emscripten and the Rust fallback. The upstream `stats_suite` fixtures also cover statistical and algorithmic workloads and guard against repeated JIT preparation for bodies larger than the per-chunk operation budget.
+The suite's `integer_ops` real-toolchain fixture covers signed division/remainder, i32/i64 rotate and bit-count operations, typed i64 calls, and nested-call operand preservation under both Emscripten and the Rust fallback. The upstream `stats_suite` fixtures also cover statistical and algorithmic workloads and guard against repeated JIT preparation for bodies larger than the per-chunk operation budget. Inspect the harness output for current coverage and skipped fixtures rather than relying on a manually maintained test total.
 
 ## Validation Script
 
@@ -244,8 +244,16 @@ This exercises the real ESP32's LVGL pointer hit testing and shared button navig
 
 For individual diagnostics use `scripts/watch_ui_serial.py --port /dev/cu.usbmodem101 button`, `tap 292 299`, or `--output /tmp/apps.ppm snapshot`. Firmware commands are `WATCH-UI BUTTON`, `WATCH-UI TAP <x> <y>`, and `WATCH-UI SNAPSHOT`. Snapshot data comes from the device's LVGL render tree (`CONFIG_LV_USE_SNAPSHOT=y`), with RGB565 hex rows. Serial diagnostics are development interfaces and remain native. The serial/diagnostic task has a 12 KiB stack to accommodate synchronous LVGL snapshot rendering and yields periodically while streaming the frame so the idle watchdog remains serviced. Host protocol parsers recover markers after truncated buffered console logs when USB is reopened.
 
+## Contributor and Agent Workflow
+
+Read [AGENTS.md](AGENTS.md) before changing the repository. It maps file ownership and meaningful symbols, cross-file features, implementation contracts, recurring pitfalls, exact validation workflows, and known test gaps. Compare its claims with the owning code and preserve unrelated working-tree changes. Read the [upstream instructions](external/fayasm/AGENTS.md) before editing `fayasm`.
+
+Keep changed handbook facts synchronized in the same edit batch as the source or workflow change, and update this README whenever architecture, workflow, build steps, or runtime behavior changes. Update feature status, interface/test ownership, and reusable failure-prevention guidance together; record future work below rather than presenting it as implemented. Before each commit, check the full diff, local documentation links, exact commands and focused validation, and include the handbook update with the change it documents. Report checks that could not run, especially ESP-IDF builds and hardware validation.
+
 ## Notes for Future Work
 
 - Add a manifest parser for external apps under `/sdcard/apps`.
 - Move the process manager from synchronous demo orchestration to long-lived tasks/process supervision.
+- Harden hibernate/resume/trap error propagation and add SmartOS memory-pressure and failure-injection coverage. Current lifecycle wrappers discard upstream spill/load statuses, so the hooks do not guarantee failure-safe checkpoints or full process restoration across boots.
+- Add focused integration checks for reboot brightness persistence, missing/corrupt installed modules, malformed serial transfers, and power-loss-safe app replacement. Current upload replacement unlinks the old payload before renaming the temporary file; installation is an unsigned, unauthenticated development interface.
 - If `fayasm` needs changes, make them in [`external/fayasm`](/Users/richard/Sources/GitHub/smartesp/external/fayasm) and commit there directly, then update the submodule pointer here.
